@@ -159,7 +159,12 @@ func _refresh_roster_list() -> void:
 		return
 	for unit in roster_manager.roster_units:
 		roster_unit_ids.append(unit.id)
-		unit_list.add_item(_t("inventory.unit.level", {"name": unit.display_name, "level": unit.level}))
+		var item_text := _t("inventory.unit.level", {"name": unit.display_name, "level": unit.level})
+		if unit.is_dead():
+			item_text += " [МЁРТВ]"
+		else:
+			item_text += " | HP %d/%d" % [unit.current_hp, unit.get_max_hp()]
+		unit_list.add_item(item_text)
 	if selected_unit_id == "" and not roster_unit_ids.is_empty():
 		selected_unit_id = roster_unit_ids[0]
 	var selected_index := roster_unit_ids.find(selected_unit_id)
@@ -204,19 +209,23 @@ func _refresh_unit_panel() -> void:
 			button.disabled = true
 			button.text = _t("inventory.slot.unavailable")
 		return
-	unit_label.text = _t("inventory.unit.summary", {
-		"name": unit.display_name,
-		"class": unit.base_unit_data.display_name if unit.base_unit_data != null else _t("inventory.unit.unknown_class"),
-		"weight": unit.compute_total_weight(),
-		"capacity": unit.base_unit_data.carry_capacity if unit.base_unit_data != null else 0,
-		"wounds": unit.persistent_wounds.size()
-	})
+	var status_text := "Мёртв" if unit.is_dead() else "В строю"
+	unit_label.text = "%s\nКласс: %s\nСтатус: %s\nHP: %d/%d\nВес: %d/%d\nРаны: %d" % [
+		unit.display_name,
+		unit.base_unit_data.display_name if unit.base_unit_data != null else _t("inventory.unit.unknown_class"),
+		status_text,
+		unit.current_hp,
+		unit.get_max_hp(),
+		unit.compute_total_weight(),
+		unit.base_unit_data.carry_capacity if unit.base_unit_data != null else 0,
+		unit.persistent_wounds.size()
+	]
 	for slot_id in SLOT_ORDER:
 		var button: Button = slot_buttons[slot_id]
-		var enabled := _slot_available_for_unit(unit, slot_id)
+		var enabled: bool = _slot_available_for_unit(unit, slot_id) and not unit.is_dead()
 		button.disabled = not enabled
 		if not enabled:
-			button.text = "%s\n%s" % [_slot_name(slot_id), _t("inventory.slot.unavailable")]
+			button.text = "%s\n%s" % [_slot_name(slot_id), ("Юнит мёртв" if unit.is_dead() else _t("inventory.slot.unavailable"))]
 			continue
 		var item = _item_in_slot(unit, slot_id)
 		if item == null:

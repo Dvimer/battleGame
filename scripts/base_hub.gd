@@ -5,7 +5,9 @@ const CHEST_POS := Vector2(280.0, 430.0)
 const TRADER_POS := Vector2(1360.0, 450.0)
 const WORKSHOP_POS := Vector2(620.0, 280.0)
 const HOUSE_POS := Vector2(1180.0, 220.0)
+const BARRACKS_POS := Vector2(360.0, 220.0)
 const CITY_GATE_POS := Vector2(960.0, 150.0)
+const PATROL_POS := Vector2(1600.0, 210.0)
 const INTERACT_RADIUS := 90.0
 const INVENTORY_SCENE := preload("res://scenes/inventory/inventory.tscn")
 
@@ -17,6 +19,7 @@ const INVENTORY_SCENE := preload("res://scenes/inventory/inventory.tscn")
 @onready var center_banner: Label = $HUD/CenterBanner
 @onready var prompt_label: Label = $HUD/PromptLabel
 @onready var hint_label: Label = $HUD/HintLabel
+@onready var inventory_button: Button = $HUD/InventoryButton
 
 var nearest_hotspot := ""
 var banner_timer := 0.0
@@ -48,6 +51,7 @@ func _ready() -> void:
 	player.arena_size = HUB_SIZE
 	player.allow_attack = false
 	player.allow_dash = false
+	player.allow_click_move = true
 	player.set_movement_locked(false)
 	var scene_router := _scene_router()
 	if scene_router != null:
@@ -56,6 +60,13 @@ func _ready() -> void:
 	inventory_ui = INVENTORY_SCENE.instantiate()
 	add_child(inventory_ui)
 	inventory_ui.open_state_changed.connect(_on_inventory_state_changed)
+	inventory_button.pressed.connect(func():
+		var active_menu_manager := _menu_manager()
+		if active_menu_manager != null and active_menu_manager.is_open():
+			active_menu_manager.close_menu()
+		if inventory_ui != null:
+			inventory_ui.toggle_inventory()
+	)
 
 	if menu_manager != null and not menu_manager.menu_state_changed.is_connected(_on_menu_state_changed):
 		menu_manager.menu_state_changed.connect(_on_menu_state_changed)
@@ -98,7 +109,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if nearest_hotspot == "":
-		prompt_label.text = localizer.t("base.prompt.walk") if localizer != null else "Walk through town. Chest, trader, workshop, house, and city gate are all active."
+		prompt_label.text = localizer.t("base.prompt.walk") if localizer != null else "Walk through town. Chest, trader, workshop, barracks, house, and city gate are all active."
 	else:
 		var hotspot_name := _hotspot_name(nearest_hotspot)
 		prompt_label.text = localizer.t("base.prompt.near", {"value": hotspot_name}) if localizer != null else "Press E or left click near %s." % hotspot_name
@@ -114,7 +125,8 @@ func _find_nearest_hotspot() -> String:
 		"chest": CHEST_POS,
 		"trader": TRADER_POS,
 		"workshop": WORKSHOP_POS,
-		"gate": CITY_GATE_POS
+		"gate": CITY_GATE_POS,
+		"patrol": PATROL_POS
 	}
 	var best := ""
 	var best_distance := INF
@@ -139,6 +151,8 @@ func _hotspot_name(hotspot_id: String) -> String:
 			return localizer.t("base.hotspot.house") if localizer != null else "the house door"
 		"gate":
 			return localizer.t("base.hotspot.gate") if localizer != null else "the city gate"
+		"patrol":
+			return "разбойничий дозор"
 		_:
 			return "marker"
 
@@ -153,6 +167,8 @@ func _open_hotspot(hotspot_id: String) -> void:
 			_open_workshop_menu()
 		"gate":
 			_open_gate_menu()
+		"patrol":
+			_start_patrol_battle()
 
 
 func _open_menu(title: String, body: String, actions: Array, closable := true) -> void:
@@ -366,6 +382,29 @@ func _start_city_run() -> void:
 		get_tree().change_scene_to_file("res://scenes/city_run.tscn")
 
 
+func _start_patrol_battle() -> void:
+	var roster_manager := get_node_or_null("/root/RosterManager")
+	if roster_manager == null or roster_manager.get_selected_party().is_empty():
+		_show_banner("В отряде нет живых бойцов для боя.", 1.6)
+		return
+	var context := BattleMockFactory.create_context_from_roster(roster_manager)
+	var battle_context := get_node_or_null("/root/BattleContext")
+	if battle_context != null:
+		battle_context.setup(
+			context["battlefield"],
+			context["attacker"],
+			context["defender"],
+			context.get("environment", {}),
+			"res://scenes/main.tscn",
+			"hub_default"
+		)
+	var scene_router := _scene_router()
+	if scene_router != null:
+		scene_router.go_to_scene("res://scenes/battle/battle.tscn")
+	else:
+		get_tree().change_scene_to_file("res://scenes/battle/battle.tscn")
+
+
 func _open_world_map() -> void:
 	var scene_router := _scene_router()
 	if scene_router != null:
@@ -433,27 +472,50 @@ func _on_language_changed(_language: String) -> void:
 	queue_redraw()
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if inventory_ui != null and inventory_ui.is_open():
+		return
+	var menu_manager := _menu_manager()
+	if menu_manager != null and menu_manager.is_open():
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if _find_nearest_hotspot() != "":
+			return
+		player.set_move_target(_screen_to_world(event.position))
+		get_viewport().set_input_as_handled()
+
+
+func _screen_to_world(screen_position: Vector2) -> Vector2:
+	return get_viewport().get_canvas_transform().affine_inverse() * screen_position
+
+
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, HUB_SIZE), Color("d8cfad"))
 	draw_rect(Rect2(Vector2(0.0, 575.0), Vector2(HUB_SIZE.x, 505.0)), Color("8fb47b"))
 	draw_rect(Rect2(Vector2(690.0, 120.0), Vector2(540.0, 150.0)), Color("8db6d9"))
 
 	_draw_house(Vector2(1050.0, 150.0), Vector2(270.0, 200.0), Color("c98c5d"))
+	_draw_house(Vector2(240.0, 150.0), Vector2(240.0, 190.0), Color("b9855b"))
 	_draw_house(Vector2(120.0, 360.0), Vector2(230.0, 150.0), Color("b98466"))
 	_draw_house(Vector2(1240.0, 370.0), Vector2(280.0, 160.0), Color("cda274"))
 	_draw_workshop()
 	_draw_gate()
+	_draw_patrol()
 	_draw_marker(CHEST_POS, Color("e0c341"))
 	_draw_marker(TRADER_POS, Color("6ac3ff"))
 	_draw_marker(HOUSE_POS, Color("f08a5d"))
+	_draw_marker(BARRACKS_POS, Color("d98842"))
 	_draw_marker(WORKSHOP_POS, Color("8fce72"))
 	_draw_marker(CITY_GATE_POS, Color("b18cff"))
+	_draw_marker(PATROL_POS, Color("d24f4f"))
 	var localizer := _localizer()
 	_draw_world_label(CHEST_POS + Vector2(-28.0, -30.0), localizer.t("base.world_label.chest") if localizer != null else "Chest", Color("e0c341"))
 	_draw_world_label(TRADER_POS + Vector2(-30.0, -30.0), localizer.t("base.world_label.trader") if localizer != null else "Trader", Color("6ac3ff"))
 	_draw_world_label(WORKSHOP_POS + Vector2(-62.0, -38.0), localizer.t("base.world_label.workshop") if localizer != null else "Workshop", Color("8fce72"))
 	_draw_world_label(HOUSE_POS + Vector2(-28.0, -38.0), localizer.t("base.world_label.house") if localizer != null else "House", Color("f08a5d"))
+	_draw_world_label(BARRACKS_POS + Vector2(-38.0, -38.0), "Казарма", Color("d98842"))
 	_draw_world_label(CITY_GATE_POS + Vector2(-44.0, -90.0), localizer.t("base.world_label.gate") if localizer != null else "City Gate", Color("b18cff"))
+	_draw_world_label(PATROL_POS + Vector2(-72.0, -38.0), "Дозор", Color("d24f4f"))
 
 
 func _draw_house(pos: Vector2, size: Vector2, wall: Color) -> void:
@@ -477,6 +539,13 @@ func _draw_workshop() -> void:
 func _draw_gate() -> void:
 	draw_arc(CITY_GATE_POS, 76.0, PI, TAU, 28, Color("6f5aa5"), 12.0)
 	draw_arc(CITY_GATE_POS, 48.0, PI, TAU, 28, Color("d7c9ff"), 8.0)
+
+
+func _draw_patrol() -> void:
+	draw_circle(PATROL_POS + Vector2(-22.0, 10.0), 16.0, Color("8f2b2b"))
+	draw_circle(PATROL_POS + Vector2(0.0, -8.0), 18.0, Color("b53a3a"))
+	draw_circle(PATROL_POS + Vector2(22.0, 8.0), 16.0, Color("8f2b2b"))
+	draw_line(PATROL_POS + Vector2(-32.0, 22.0), PATROL_POS + Vector2(32.0, 22.0), Color("5a3a24"), 6.0)
 
 
 func _draw_marker(pos: Vector2, tint: Color) -> void:

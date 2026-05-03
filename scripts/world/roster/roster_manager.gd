@@ -15,8 +15,11 @@ const WoundInstanceScript = preload("res://scripts/world/wounds/wound_instance.g
 
 signal roster_changed
 
+const PARTY_CAPACITY := 3
+
 var roster_units: Array = []
 var selected_party_ids: Array[String] = []
+var recruit_offers: Array[Dictionary] = []
 
 var unit_catalog := {}
 var item_catalog := {}
@@ -33,32 +36,23 @@ func ensure_initialized() -> void:
 		_rebuild_catalogs()
 	if roster_units.is_empty():
 		reset_defaults()
+	else:
+		_ensure_default_roster_composition()
 
 
 func reset_defaults() -> void:
 	_rebuild_catalogs()
 	roster_units.clear()
 	selected_party_ids.clear()
+	recruit_offers = _build_default_recruit_offers()
 
-	var unit := RosterUnitScript.new().setup("captain_01", "Капитан", unit_catalog["footman"])
-	unit.appearance.skin_tint = Color(0.94, 0.88, 0.76, 1.0)
-	unit.appearance.cape_paint = Color("7a2f2f")
-	unit.appearance.shield_paint = Color("f2f2f2")
-	unit.appearance.shield_emblem_id = "wolf_emblem"
-	unit.equip(ItemDataScript.Slot.MAIN_HAND, ItemInstanceScript.from_data(item_catalog["iron_sword"]))
-	unit.equip(ItemDataScript.Slot.OFF_HAND, ItemInstanceScript.from_data(item_catalog["kite_shield"]))
-	unit.equip(ItemDataScript.Slot.BODY, ItemInstanceScript.from_data(item_catalog["padded_armor"]))
-	unit.equip(ItemDataScript.Slot.HEAD, ItemInstanceScript.from_data(item_catalog["hood"]))
-	unit.assign_quick_slot(0, ItemInstanceScript.from_data(item_catalog["bandage"]))
-	unit.assign_quick_slot(1, ItemInstanceScript.from_data(item_catalog["bandage"]))
-
-	roster_units.append(unit)
-	selected_party_ids.append(unit.id)
+	_add_default_roster_unit(_build_default_captain())
+	_add_default_roster_unit(_build_default_footman())
+	_add_default_roster_unit(_build_default_archer())
 
 	var inventory: Node = _inventory()
 	if inventory != null:
 		inventory.reset_defaults()
-		inventory.add(ItemInstanceScript.from_data(item_catalog["spear"]))
 		inventory.add(ItemInstanceScript.from_data(item_catalog["bandage"]))
 		inventory.add(ItemInstanceScript.from_data(item_catalog["repair_kit"]))
 		inventory.add(ItemInstanceScript.from_data(item_catalog["red_paint"]))
@@ -71,7 +65,7 @@ func get_selected_party() -> Array:
 	var result: Array = []
 	for unit_id in selected_party_ids:
 		var unit: RosterUnit = find_unit(unit_id)
-		if unit != null:
+		if unit != null and unit.is_available_for_battle():
 			result.append(unit)
 	return result
 
@@ -87,9 +81,67 @@ func add_unit(unit) -> void:
 	if unit == null:
 		return
 	roster_units.append(unit)
-	if not selected_party_ids.has(unit.id):
+	if selected_party_ids.size() < PARTY_CAPACITY and not selected_party_ids.has(unit.id):
 		selected_party_ids.append(unit.id)
 	roster_changed.emit()
+
+
+func get_recruit_offers() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for offer in recruit_offers:
+		result.append(offer.duplicate(true))
+	return result
+
+
+func get_party_capacity() -> int:
+	return PARTY_CAPACITY
+
+
+func get_party_units() -> Array:
+	var result: Array = []
+	for unit_id in selected_party_ids:
+		var unit: RosterUnit = find_unit(unit_id)
+		if unit != null:
+			result.append(unit)
+	return result
+
+
+func hire_recruit(recruit_id: String, replace_unit_id := "") -> bool:
+	var offer_index := _find_recruit_offer_index(recruit_id)
+	if offer_index == -1:
+		return false
+	var offer := recruit_offers[offer_index]
+	if not _can_afford_offer(offer):
+		return false
+	var party_index := selected_party_ids.size()
+	if replace_unit_id != "":
+		party_index = selected_party_ids.find(replace_unit_id)
+		if party_index == -1 or replace_unit_id == "captain_01":
+			return false
+		if not _remove_roster_unit(replace_unit_id):
+			return false
+	elif selected_party_ids.size() >= PARTY_CAPACITY:
+		return false
+	var unit := _create_unit_from_offer(offer)
+	if unit == null:
+		return false
+	_charge_offer(offer)
+	recruit_offers.remove_at(offer_index)
+	roster_units.append(unit)
+	selected_party_ids.insert(party_index, unit.id)
+	_cleanup_selected_party()
+	roster_changed.emit()
+	return true
+
+
+func dismiss_unit(unit_id: String) -> bool:
+	if unit_id == "captain_01":
+		return false
+	if not _remove_roster_unit(unit_id):
+		return false
+	_cleanup_selected_party()
+	roster_changed.emit()
+	return true
 
 
 func create_attacker_army_from_selected_party() -> ArmyData:
@@ -97,15 +149,34 @@ func create_attacker_army_from_selected_party() -> ArmyData:
 	army.army_id = "roster_party"
 	army.display_name = "Отряд"
 	var slots: Array[ArmySlotData] = []
-	for unit in get_selected_party():
-		slots.append(unit.to_army_slot())
+	var deploy_positions := [
+		Vector2i(1, 3),
+		Vector2i(1, 5),
+		Vector2i(0, 4),
+		Vector2i(0, 2),
+		Vector2i(0, 6),
+		Vector2i(2, 4)
+	]
+	var party := get_selected_party()
+	for index in range(party.size()):
+		var slot: ArmySlotData = party[index].to_army_slot()
+		slot.deploy_hex = deploy_positions[index] if index < deploy_positions.size() else Vector2i(0, 3 + index)
+		slot.facing = 0
+		slots.append(slot)
 	army.slots = slots
 	return army
 
 
 func apply_battle_result(result: Dictionary) -> void:
+	var hp_per_unit: Dictionary = result.get("hp_per_unit", {})
+	var killed_lookup := {}
 	for unit_id in Array(result.get("killed", [])):
-		_remove_unit(str(unit_id))
+		killed_lookup[str(unit_id)] = true
+	for unit in roster_units:
+		if hp_per_unit.has(unit.id):
+			unit.apply_battle_state(int(hp_per_unit[unit.id]), killed_lookup.has(unit.id))
+		elif killed_lookup.has(unit.id):
+			unit.apply_battle_state(0, true)
 
 	var wounds_per_unit: Dictionary = result.get("persistent_wounds_per_unit", {})
 	for unit_id in wounds_per_unit.keys():
@@ -130,6 +201,7 @@ func apply_battle_result(result: Dictionary) -> void:
 		if item != null:
 			item.charges = maxi(0, item.charges + int(charges_delta[instance_id]))
 
+	_cleanup_selected_party()
 	roster_changed.emit()
 
 
@@ -158,7 +230,8 @@ func to_dict() -> Dictionary:
 		units_payload.append(unit.to_dict())
 	return {
 		"roster_units": units_payload,
-		"selected_party_ids": selected_party_ids.duplicate()
+		"selected_party_ids": selected_party_ids.duplicate(),
+		"recruit_offers": recruit_offers.duplicate(true)
 	}
 
 
@@ -166,6 +239,7 @@ func load_from_dict(payload: Dictionary) -> void:
 	_rebuild_catalogs()
 	roster_units.clear()
 	selected_party_ids.clear()
+	recruit_offers = []
 	for unit_payload in Array(payload.get("roster_units", [])):
 		if unit_payload is Dictionary:
 			var unit := RosterUnitScript.from_dict(unit_payload, unit_catalog, item_catalog, wound_catalog)
@@ -173,27 +247,206 @@ func load_from_dict(payload: Dictionary) -> void:
 				roster_units.append(unit)
 	for unit_id in Array(payload.get("selected_party_ids", [])):
 		selected_party_ids.append(str(unit_id))
+	for offer in Array(payload.get("recruit_offers", [])):
+		if offer is Dictionary:
+			recruit_offers.append(Dictionary(offer).duplicate(true))
 	if roster_units.is_empty():
 		reset_defaults()
 		return
+	_ensure_default_roster_composition()
+	if recruit_offers.is_empty():
+		recruit_offers = _build_default_recruit_offers()
+	_cleanup_selected_party()
 	roster_changed.emit()
 
 
-func _remove_unit(unit_id: String) -> void:
-	for index in range(roster_units.size() - 1, -1, -1):
-		if roster_units[index].id == unit_id:
-			roster_units.remove_at(index)
-	selected_party_ids.erase(unit_id)
+func revive_unit(unit_id: String, restored_hp := 1) -> bool:
+	var unit := find_unit(unit_id)
+	if unit == null:
+		return false
+	unit.revive(restored_hp)
+	if selected_party_ids.size() < PARTY_CAPACITY and not selected_party_ids.has(unit.id):
+		selected_party_ids.append(unit.id)
+	roster_changed.emit()
+	return true
 
 
 func _inventory():
 	return get_node_or_null("/root/RosterInventory")
 
 
+func _add_default_roster_unit(unit: RosterUnit) -> void:
+	roster_units.append(unit)
+	if selected_party_ids.size() < PARTY_CAPACITY:
+		selected_party_ids.append(unit.id)
+
+
+func _ensure_default_roster_composition() -> void:
+	var defaults := [
+		_build_default_captain(),
+		_build_default_footman(),
+		_build_default_archer()
+	]
+	for default_unit in defaults:
+		if find_unit(default_unit.id) == null:
+			roster_units.append(default_unit)
+		if default_unit.is_available_for_battle() and not selected_party_ids.has(default_unit.id) and selected_party_ids.size() < PARTY_CAPACITY:
+			selected_party_ids.append(default_unit.id)
+
+
+func _build_default_captain() -> RosterUnit:
+	var unit := RosterUnitScript.new().setup("captain_01", "Капитан", unit_catalog["footman"])
+	unit.appearance.skin_tint = Color(0.94, 0.88, 0.76, 1.0)
+	unit.appearance.cape_paint = Color("7a2f2f")
+	unit.appearance.shield_paint = Color("f2f2f2")
+	unit.appearance.shield_emblem_id = "wolf_emblem"
+	unit.equip(ItemDataScript.Slot.MAIN_HAND, ItemInstanceScript.from_data(item_catalog["iron_sword"]))
+	unit.equip(ItemDataScript.Slot.OFF_HAND, ItemInstanceScript.from_data(item_catalog["kite_shield"]))
+	unit.equip(ItemDataScript.Slot.BODY, ItemInstanceScript.from_data(item_catalog["padded_armor"]))
+	unit.equip(ItemDataScript.Slot.HEAD, ItemInstanceScript.from_data(item_catalog["hood"]))
+	unit.assign_quick_slot(0, ItemInstanceScript.from_data(item_catalog["bandage"]))
+	unit.assign_quick_slot(1, ItemInstanceScript.from_data(item_catalog["bandage"]))
+	return unit
+
+
+func _build_default_footman() -> RosterUnit:
+	var unit := RosterUnitScript.new().setup("militia_02", "Ополченец Бран", unit_catalog["footman"])
+	unit.appearance.skin_tint = Color(0.79, 0.68, 0.58, 1.0)
+	unit.appearance.cape_paint = Color("385a7a")
+	unit.equip(ItemDataScript.Slot.MAIN_HAND, ItemInstanceScript.from_data(item_catalog["spear"]))
+	unit.equip(ItemDataScript.Slot.BODY, ItemInstanceScript.from_data(item_catalog["padded_armor"]))
+	unit.assign_quick_slot(0, ItemInstanceScript.from_data(item_catalog["bandage"]))
+	return unit
+
+
+func _build_default_archer() -> RosterUnit:
+	var unit := RosterUnitScript.new().setup("archer_03", "Стрелок Лис", unit_catalog["archer"])
+	unit.appearance.skin_tint = Color(0.88, 0.80, 0.68, 1.0)
+	unit.appearance.cape_paint = Color("4a6a3d")
+	unit.equip(ItemDataScript.Slot.MAIN_HAND, ItemInstanceScript.from_data(item_catalog["spear"]))
+	unit.equip(ItemDataScript.Slot.HEAD, ItemInstanceScript.from_data(item_catalog["hood"]))
+	unit.assign_quick_slot(0, ItemInstanceScript.from_data(item_catalog["bandage"]))
+	return unit
+
+
+func _cleanup_selected_party() -> void:
+	var filtered: Array[String] = []
+	for unit_id in selected_party_ids:
+		if filtered.size() >= PARTY_CAPACITY:
+			break
+		var unit := find_unit(unit_id)
+		if unit == null or unit.is_dead():
+			continue
+		if not filtered.has(unit_id):
+			filtered.append(unit_id)
+	selected_party_ids = filtered
+
+
 func _rebuild_catalogs() -> void:
 	unit_catalog = _build_unit_catalog()
 	item_catalog = _build_item_catalog()
 	wound_catalog = _build_wound_catalog()
+
+
+func _create_unit_from_offer(offer: Dictionary) -> RosterUnit:
+	var base_unit_id := str(offer.get("base_unit_id", "footman"))
+	if not unit_catalog.has(base_unit_id):
+		return null
+	var unit := RosterUnitScript.new().setup(
+		str(offer.get("unit_id", "recruit_%s" % str(Time.get_unix_time_from_system()))),
+		str(offer.get("display_name", "Ополченец")),
+		unit_catalog[base_unit_id]
+	)
+	unit.perm_stat_bonuses = Dictionary(offer.get("perm_stat_bonuses", {})).duplicate(true)
+	var appearance_payload := Dictionary(offer.get("appearance", {}))
+	if appearance_payload.has("skin_tint"):
+		unit.appearance.skin_tint = Color(appearance_payload.get("skin_tint", "ffffff"))
+	if appearance_payload.has("cape_paint"):
+		unit.appearance.cape_paint = Color(appearance_payload.get("cape_paint", "7a2f2f"))
+	if appearance_payload.has("shield_paint"):
+		unit.appearance.shield_paint = Color(appearance_payload.get("shield_paint", "f2f2f2"))
+	unit.appearance.shield_emblem_id = str(appearance_payload.get("shield_emblem_id", ""))
+	_apply_standard_loadout(unit)
+	unit.current_hp = unit.get_max_hp()
+	return unit
+
+
+func _apply_standard_loadout(unit: RosterUnit) -> void:
+	if unit == null:
+		return
+	unit.equipped.clear()
+	unit.quick_slots.clear()
+	match unit.base_unit_id:
+		"archer":
+			unit.equip(ItemDataScript.Slot.MAIN_HAND, ItemInstanceScript.from_data(item_catalog["spear"]))
+			unit.equip(ItemDataScript.Slot.HEAD, ItemInstanceScript.from_data(item_catalog["hood"]))
+			unit.assign_quick_slot(0, ItemInstanceScript.from_data(item_catalog["bandage"]))
+		_:
+			unit.equip(ItemDataScript.Slot.MAIN_HAND, ItemInstanceScript.from_data(item_catalog["spear"]))
+			unit.equip(ItemDataScript.Slot.BODY, ItemInstanceScript.from_data(item_catalog["padded_armor"]))
+			unit.assign_quick_slot(0, ItemInstanceScript.from_data(item_catalog["bandage"]))
+
+
+func _build_default_recruit_offers() -> Array[Dictionary]:
+	return [
+		_make_offer("recruit_offer_01", "Дорин", "footman", 0, {"max_hp": 1}, {"skin_tint": "d4b198", "cape_paint": "7a3f2f"}),
+		_make_offer("recruit_offer_02", "Ярвик", "footman", 0, {"attack": 1}, {"skin_tint": "9f7c66", "cape_paint": "3d5876"}),
+		_make_offer("recruit_offer_03", "Хольм", "footman", 0, {"defense": 1}, {"skin_tint": "c7a27d", "cape_paint": "6a6f3d"}),
+		_make_offer("recruit_offer_04", "Сивер", "footman", 0, {"movement": 1}, {"skin_tint": "7d5f4e", "cape_paint": "5b3f7a"}),
+		_make_offer("recruit_offer_05", "Торен", "footman", 0, {"initiative": 1}, {"skin_tint": "b58e71", "cape_paint": "2f6a68"}),
+		_make_offer("recruit_offer_06", "Маркел", "footman", 0, {"action_points": 1}, {"skin_tint": "8c6a55", "cape_paint": "7a2f45"}),
+		_make_offer("recruit_offer_07", "Эдрик", "footman", 0, {"max_hp": 1, "defense": 1}, {"skin_tint": "e0bf9a", "cape_paint": "4e5a36"}),
+		_make_offer("recruit_offer_08", "Ларк", "archer", 0, {"initiative": 1}, {"skin_tint": "d7b59b", "cape_paint": "365f42"}),
+		_make_offer("recruit_offer_09", "Весса", "archer", 0, {"attack_range": 1}, {"skin_tint": "b5866e", "cape_paint": "5f4b36"}),
+		_make_offer("recruit_offer_10", "Рин", "archer", 0, {"movement": 1, "attack": 1}, {"skin_tint": "f0d0b2", "cape_paint": "3a5275"})
+	]
+
+
+func _make_offer(recruit_id: String, display_name: String, base_unit_id: String, price: int, bonuses: Dictionary, appearance: Dictionary) -> Dictionary:
+	return {
+		"recruit_id": recruit_id,
+		"unit_id": recruit_id.replace("offer", "unit"),
+		"display_name": display_name,
+		"base_unit_id": base_unit_id,
+		"price": price,
+		"perm_stat_bonuses": bonuses.duplicate(true),
+		"appearance": appearance.duplicate(true)
+	}
+
+
+func _find_recruit_offer_index(recruit_id: String) -> int:
+	for index in range(recruit_offers.size()):
+		if str(recruit_offers[index].get("recruit_id", "")) == recruit_id:
+			return index
+	return -1
+
+
+func _can_afford_offer(offer: Dictionary) -> bool:
+	var inventory: Node = _inventory()
+	if inventory == null:
+		return int(offer.get("price", 0)) <= 0
+	return inventory.currency >= int(offer.get("price", 0))
+
+
+func _charge_offer(offer: Dictionary) -> void:
+	var price := int(offer.get("price", 0))
+	if price <= 0:
+		return
+	var inventory: Node = _inventory()
+	if inventory == null:
+		return
+	inventory.currency = maxi(0, inventory.currency - price)
+	inventory.inventory_changed.emit()
+
+
+func _remove_roster_unit(unit_id: String) -> bool:
+	for index in range(roster_units.size() - 1, -1, -1):
+		if roster_units[index].id != unit_id:
+			continue
+		roster_units.remove_at(index)
+		selected_party_ids.erase(unit_id)
+		return true
+	return false
 
 
 func _build_unit_catalog() -> Dictionary:

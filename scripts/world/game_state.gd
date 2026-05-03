@@ -39,6 +39,24 @@ func ensure_loaded() -> void:
 		_begin_new_session()
 
 
+func has_save() -> bool:
+	return FileAccess.file_exists(SAVE_PATH)
+
+
+func start_new_game() -> void:
+	loaded = true
+	var absolute_path := ProjectSettings.globalize_path(SAVE_PATH)
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(absolute_path)
+	_begin_new_session()
+	save_game()
+
+
+func continue_game() -> void:
+	loaded = false
+	ensure_loaded()
+
+
 func save_game() -> void:
 	var world_meta = _world_generator().get_world_meta()
 	var quest_titles: Array = active_quest_titles.duplicate()

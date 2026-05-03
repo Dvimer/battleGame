@@ -1,0 +1,173 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/barracks_room.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/spawn_point.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/door_trigger.gd" id="4"]
+
+[node name="BarracksRoom" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(740, 450)
+enabled = true
+
+[node name="Player" parent="." instance=ExtResource("2")]
+position = Vector2(740, 690)
+
+[node name="BarracksEntrySpawn" type="Marker2D" parent="."]
+position = Vector2(740, 690)
+script = ExtResource("3")
+spawn_id = "barracks_entry"
+
+[node name="BarracksExitTrigger" type="Node2D" parent="."]
+position = Vector2(740, 760)
+script = ExtResource("4")
+target_scene_path = "res://scenes/main.tscn"
+target_spawn_id = "hub_barracks_return"
+transition_mode = "auto"
+trigger_radius = 54.0
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="TitleLabel" type="Label" parent="HUD"]
+offset_left = 28.0
+offset_top = 18.0
+offset_right = 500.0
+offset_bottom = 56.0
+theme_override_font_sizes/font_size = 28
+text = "Казарма ополчения"
+
+[node name="PromptLabel" type="Label" parent="HUD"]
+offset_left = 28.0
+offset_top = 808.0
+offset_right = 1420.0
+offset_bottom = 840.0
+theme_override_font_sizes/font_size = 20
+text = "ЛКМ по полу двигает. Дверь внизу выводит обратно в город."
+
+[node name="HintLabel" type="Label" parent="HUD"]
+offset_left = 28.0
+offset_top = 842.0
+offset_right = 1440.0
+offset_bottom = 882.0
+theme_override_font_sizes/font_size = 18
+text = "Выбирай рекрута справа. Invite добавляет его в отряд, Replace меняет выбранного бойца, ПКМ по бойцу увольняет."
+
+[node name="RootPanel" type="Panel" parent="HUD"]
+offset_left = 360.0
+offset_top = 78.0
+offset_right = 1432.0
+offset_bottom = 776.0
+
+[node name="Margin" type="MarginContainer" parent="HUD/RootPanel"]
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 1054.0
+offset_bottom = 680.0
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="VBox" type="VBoxContainer" parent="HUD/RootPanel/Margin"]
+offset_right = 1020.0
+offset_bottom = 664.0
+theme_override_constants/separation = 12
+
+[node name="TopBar" type="HBoxContainer" parent="HUD/RootPanel/Margin/VBox"]
+offset_right = 1020.0
+offset_bottom = 28.0
+
+[node name="HeaderLabel" type="Label" parent="HUD/RootPanel/Margin/VBox/TopBar"]
+custom_minimum_size = Vector2(620, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
+text = "Вербуй новых бойцов для городского отряда"
+
+[node name="SilverLabel" type="Label" parent="HUD/RootPanel/Margin/VBox/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 2
+text = "Казна: 0"
+
+[node name="CloseButton" type="Button" parent="HUD/RootPanel/Margin/VBox/TopBar"]
+custom_minimum_size = Vector2(46, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "X"
+
+[node name="Content" type="HBoxContainer" parent="HUD/RootPanel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 500)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 14
+
+[node name="PartyColumn" type="VBoxContainer" parent="HUD/RootPanel/Margin/VBox/Content"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PartyTitle" type="Label" parent="HUD/RootPanel/Margin/VBox/Content/PartyColumn"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Текущий отряд"
+
+[node name="PartyList" type="ItemList" parent="HUD/RootPanel/Margin/VBox/Content/PartyColumn"]
+custom_minimum_size = Vector2(0, 250)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PartyDetails" type="Label" parent="HUD/RootPanel/Margin/VBox/Content/PartyColumn"]
+custom_minimum_size = Vector2(0, 188)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+autowrap_mode = 3
+text = "Выбери бойца слева."
+
+[node name="RecruitColumn" type="VBoxContainer" parent="HUD/RootPanel/Margin/VBox/Content"]
+custom_minimum_size = Vector2(520, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RecruitTitle" type="Label" parent="HUD/RootPanel/Margin/VBox/Content/RecruitColumn"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Рекруты"
+
+[node name="RecruitList" type="ItemList" parent="HUD/RootPanel/Margin/VBox/Content/RecruitColumn"]
+custom_minimum_size = Vector2(0, 250)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="RecruitDetails" type="Label" parent="HUD/RootPanel/Margin/VBox/Content/RecruitColumn"]
+custom_minimum_size = Vector2(0, 188)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+autowrap_mode = 3
+text = "Выбери рекрута справа."
+
+[node name="Actions" type="HBoxContainer" parent="HUD/RootPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="InviteButton" type="Button" parent="HUD/RootPanel/Margin/VBox/Actions"]
+custom_minimum_size = Vector2(180, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Invite"
+
+[node name="ReplaceButton" type="Button" parent="HUD/RootPanel/Margin/VBox/Actions"]
+custom_minimum_size = Vector2(180, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Replace"
+
+[node name="StatusLabel" type="Label" parent="HUD/RootPanel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+autowrap_mode = 3
+text = ""

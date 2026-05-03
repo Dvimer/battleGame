@@ -10,3 +10,4 @@ class_name ArmySlotData
 @export var appearance: Resource
 @export var persistent_wounds: Array = []
 @export var roster_unit_id := ""
+@export var starting_hp := -1

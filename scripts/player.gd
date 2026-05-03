@@ -22,6 +22,7 @@ const WEAPON_PISTOL := "pistol"
 @export var arena_size := Vector2(1280.0, 720.0)
 @export var allow_attack := true
 @export var allow_dash := true
+@export var allow_click_move := false
 
 var max_health := 5
 var health := 5
@@ -46,6 +47,8 @@ var movement_locked := false
 var active_weapon_id := WEAPON_SWORD
 var secondary_weapon_id := ""
 var ranged_damage_bonus := 0
+var move_target := Vector2.ZERO
+var has_move_target := false
 
 
 func _ready() -> void:
@@ -71,6 +74,14 @@ func _physics_process(delta: float) -> void:
 		combo_changed.emit(combo_step, 0.0)
 
 	var input_vector := Vector2.ZERO if movement_locked else Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	if input_vector.length_squared() > 0.0:
+		clear_move_target()
+	elif allow_click_move and has_move_target and not movement_locked:
+		var to_target := move_target - global_position
+		if to_target.length() <= 8.0:
+			clear_move_target()
+		else:
+			input_vector = to_target.normalized()
 	if input_vector.length_squared() > 0.0:
 		facing = input_vector.normalized()
 
@@ -236,6 +247,16 @@ func set_movement_locked(value: bool) -> void:
 	movement_locked = value
 	if movement_locked:
 		velocity = Vector2.ZERO
+		clear_move_target()
+
+
+func set_move_target(target: Vector2) -> void:
+	move_target = target
+	has_move_target = true
+
+
+func clear_move_target() -> void:
+	has_move_target = false
 
 
 func reset_for_run(start_position: Vector2) -> void:
@@ -262,6 +283,7 @@ func reset_for_run(start_position: Vector2) -> void:
 	active_weapon_id = WEAPON_SWORD
 	secondary_weapon_id = ""
 	ranged_damage_bonus = 0
+	clear_move_target()
 	health_changed.emit(health, max_health)
 	combo_changed.emit(combo_step, 0.0)
 	weapon_changed.emit(active_weapon_id, secondary_weapon_id)

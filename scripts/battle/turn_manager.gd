@@ -66,6 +66,31 @@ func _initiative_score(unit: UnitInstance) -> int:
 	return unit.data.initiative + unit.morale - int(unit.fatigue * 0.5)
 
 
+func build_turn_order_preview() -> Array[UnitInstance]:
+	var preview: Array[UnitInstance] = []
+	var seen := {}
+	if battle_state == null:
+		return preview
+	if battle_state.active_unit != null and battle_state.active_unit.alive:
+		preview.append(battle_state.active_unit)
+		seen[battle_state.active_unit.instance_id] = true
+	for unit in queue:
+		if unit == null or not unit.alive:
+			continue
+		if seen.has(unit.instance_id):
+			continue
+		preview.append(unit)
+		seen[unit.instance_id] = true
+	var next_round := battle_state.living_units()
+	next_round.sort_custom(func(a, b): return _initiative_score(a) > _initiative_score(b))
+	for unit in next_round:
+		if unit == null or seen.has(unit.instance_id):
+			continue
+		preview.append(unit)
+		seen[unit.instance_id] = true
+	return preview
+
+
 func _finish_if_no_contest() -> bool:
 	if battle_state == null or battle_state.phase == "resolution":
 		return true

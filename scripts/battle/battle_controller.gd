@@ -38,7 +38,8 @@ func _load_context() -> Dictionary:
 	var battle_context := get_node_or_null("/root/BattleContext")
 	if battle_context != null and battle_context.has_method("is_ready") and battle_context.is_ready():
 		return battle_context.consume()
-	return BattleMockFactory.create_context()
+	var roster_manager := get_node_or_null("/root/RosterManager")
+	return BattleMockFactory.create_context_from_roster(roster_manager)
 
 
 func _build_state() -> void:
@@ -64,15 +65,17 @@ func _connect_events() -> void:
 	hud.end_turn_pressed.connect(_end_player_turn)
 	hud.wait_pressed.connect(_wait_player_turn)
 	hud.defend_pressed.connect(_defend_player_turn)
+	hud.flee_pressed.connect(_flee_battle)
 	hud.return_pressed.connect(_return_after_battle)
 	input_controller.end_turn_requested.connect(_end_player_turn)
 	turn_manager.turn_started.connect(_on_turn_started)
 	turn_manager.round_started.connect(func(round_number): hud.push_log("Раунд %d." % round_number))
 	battle_state.unit_moved.connect(_on_unit_moved)
 	battle_state.unit_damaged.connect(_on_unit_damaged)
-	battle_state.unit_died.connect(func(unit): hud.push_log("%s выбывает из боя." % unit.display_name()))
-	battle_state.unit_waited.connect(func(unit): hud.push_log("%s ждёт удобного момента." % unit.display_name()))
-	battle_state.unit_defended.connect(func(unit): hud.push_log("%s занимает защитную стойку." % unit.display_name()))
+	battle_state.unit_died.connect(func(unit): hud.push_log("%s выбывает из боя." % hud.format_unit_name(unit)))
+	battle_state.unit_died.connect(func(_unit): _refresh_turn_order())
+	battle_state.unit_waited.connect(func(unit): hud.push_log("%s ждёт удобного момента." % hud.format_unit_name(unit)))
+	battle_state.unit_defended.connect(func(unit): hud.push_log("%s занимает защитную стойку." % hud.format_unit_name(unit)))
 	battle_state.battle_finished.connect(_on_battle_finished)
 
 
@@ -81,6 +84,7 @@ func _on_turn_started(unit: UnitInstance) -> void:
 	hud.update_turn(unit, battle_state.round_number)
 	hud.update_selection(unit)
 	hud.set_player_turn(unit.team == 0)
+	_refresh_turn_order()
 	_refresh_overlays()
 	if unit.team == 1:
 		_run_ai_turn(unit)
@@ -124,7 +128,7 @@ func _try_player_attack(target: UnitInstance) -> void:
 		hud.push_log("Цель недоступна: %s." % str(result.get("reason", "unknown")))
 		return
 	hex_map.show_attack_trace(active.coord, target.coord)
-	hud.push_log("%s атакует %s: -%d HP." % [active.display_name(), target.display_name(), int(result["damage"])])
+	hud.push_log("%s атакует %s: -%d HP." % [hud.format_unit_name(active), hud.format_unit_name(target), int(result["damage"])])
 	if battle_state.phase != "resolution":
 		turn_manager.end_turn()
 
@@ -152,6 +156,14 @@ func _defend_player_turn() -> void:
 	turn_manager.end_turn()
 
 
+func _flee_battle() -> void:
+	var active := battle_state.active_unit
+	if active == null or active.team != 0 or battle_state.phase == "resolution":
+		return
+	hud.push_log("Отряд отступает с поля боя.")
+	battle_state.finish_battle(1, "retreat")
+
+
 func _run_ai_turn(unit: UnitInstance) -> void:
 	if ai_busy:
 		return
@@ -166,14 +178,14 @@ func _run_ai_turn(unit: UnitInstance) -> void:
 				var result := battle_state.apply_command(BattleCommand.attack(unit, target))
 				if bool(result.get("ok", false)):
 					hex_map.show_attack_trace(from_coord, target.coord)
-					hud.push_log("%s атакует %s: -%d HP." % [unit.display_name(), target.display_name(), int(result.get("damage", 0))])
+					hud.push_log("%s атакует %s: -%d HP." % [hud.format_unit_name(unit), hud.format_unit_name(target), int(result.get("damage", 0))])
 				else:
-					hud.push_log("%s не может атаковать: %s." % [unit.display_name(), str(result.get("reason", "unknown"))])
+					hud.push_log("%s не может атаковать: %s." % [hud.format_unit_name(unit), str(result.get("reason", "unknown"))])
 				break
 			"move":
 				var result := battle_state.apply_command(BattleCommand.move(unit, action["coord"]))
 				if not bool(result.get("ok", false)):
-					hud.push_log("%s не может двигаться: %s." % [unit.display_name(), str(result.get("reason", "unknown"))])
+					hud.push_log("%s не может двигаться: %s." % [hud.format_unit_name(unit), str(result.get("reason", "unknown"))])
 					break
 			_:
 				break
@@ -242,7 +254,7 @@ func _maybe_auto_end(unit: UnitInstance) -> void:
 
 
 func _on_unit_moved(unit: UnitInstance, from_coord: Vector2i, to_coord: Vector2i) -> void:
-	hud.push_log("%s: %s -> %s." % [unit.display_name(), from_coord, to_coord])
+	hud.push_log("%s: %s -> %s." % [hud.format_unit_name(unit), from_coord, to_coord])
 
 
 func _on_unit_damaged(unit: UnitInstance, amount: int, result: Dictionary) -> void:
@@ -253,10 +265,16 @@ func _on_unit_damaged(unit: UnitInstance, amount: int, result: Dictionary) -> vo
 
 func _on_battle_finished(result: Dictionary) -> void:
 	hex_map.set_overlays(Vector2i(-999, -999), {}, {}, [], Vector2i(-999, -999))
-	hud.show_result(result)
+	var enriched_result := _build_battle_result(result)
+	hud.show_result(enriched_result)
+	_refresh_turn_order()
+	if bool(context.get("apply_to_roster", false)):
+		var roster_manager = get_node_or_null("/root/RosterManager")
+		if roster_manager != null and roster_manager.has_method("apply_battle_result"):
+			roster_manager.apply_battle_result(enriched_result)
 	var callback: Callable = context.get("on_finished", Callable())
 	if callback.is_valid():
-		callback.call(result)
+		callback.call(enriched_result)
 
 
 func _return_after_battle() -> void:
@@ -266,3 +284,27 @@ func _return_after_battle() -> void:
 		scene_router.go_to_scene(return_scene, str(context.get("return_spawn_id", "")))
 		return
 	get_tree().reload_current_scene()
+
+
+func _refresh_turn_order() -> void:
+	hud.update_turn_order(turn_manager.build_turn_order_preview(), battle_state.active_unit)
+
+
+func _build_battle_result(base_result: Dictionary) -> Dictionary:
+	var result := base_result.duplicate(true)
+	var hp_per_unit := {}
+	var killed: Array[String] = []
+	var wounds_per_unit := {}
+	for unit in battle_state.units:
+		if unit == null or unit.team != 0 or unit.roster_unit_id == "":
+			continue
+		hp_per_unit[unit.roster_unit_id] = unit.hp if unit.alive else 0
+		wounds_per_unit[unit.roster_unit_id] = []
+		if not unit.alive:
+			killed.append(unit.roster_unit_id)
+	result["hp_per_unit"] = hp_per_unit
+	result["killed"] = killed
+	result["persistent_wounds_per_unit"] = wounds_per_unit
+	result["durability_delta"] = {}
+	result["charges_delta"] = {}
+	return result

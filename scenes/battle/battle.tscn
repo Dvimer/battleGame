@@ -33,11 +33,11 @@ layer = 10
 script = ExtResource("6")
 
 [node name="Panel" type="PanelContainer" parent="HUD"]
-custom_minimum_size = Vector2(430, 430)
+custom_minimum_size = Vector2(430, 520)
 offset_left = 24.0
 offset_top = 24.0
 offset_right = 454.0
-offset_bottom = 454.0
+offset_bottom = 544.0
 
 [node name="Margin" type="MarginContainer" parent="HUD/Panel"]
 layout_mode = 2
@@ -81,12 +81,12 @@ text = "Forecast"
 autowrap_mode = 3
 
 [node name="Log" type="RichTextLabel" parent="HUD/Panel/Margin/Rows"]
-custom_minimum_size = Vector2(0, 150)
+custom_minimum_size = Vector2(0, 240)
 layout_mode = 2
 size_flags_vertical = 3
-bbcode_enabled = false
+bbcode_enabled = true
 fit_content = false
-scroll_active = false
+scroll_active = true
 autowrap_mode = 3
 
 [node name="Actions" type="HBoxContainer" parent="HUD/Panel/Margin/Rows"]
@@ -107,6 +107,13 @@ size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 16
 text = "Defend"
 
+[node name="Flee" type="Button" parent="HUD/Panel/Margin/Rows/Actions"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "Сбежать"
+
 [node name="EndTurn" type="Button" parent="HUD/Panel/Margin/Rows"]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
@@ -118,3 +125,38 @@ custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 theme_override_font_sizes/font_size = 17
 text = "Return / Restart"
+
+[node name="TurnOrderPanel" type="PanelContainer" parent="HUD"]
+offset_left = 24.0
+offset_top = 922.0
+offset_right = 1896.0
+offset_bottom = 1056.0
+
+[node name="Margin" type="MarginContainer" parent="HUD/TurnOrderPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 12
+
+[node name="Rows" type="VBoxContainer" parent="HUD/TurnOrderPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="HUD/TurnOrderPanel/Margin/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Очередность хода"
+
+[node name="Scroll" type="ScrollContainer" parent="HUD/TurnOrderPanel/Margin/Rows"]
+custom_minimum_size = Vector2(0, 82)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 2
+vertical_scroll_mode = 0
+follow_focus = true
+
+[node name="Order" type="Control" parent="HUD/TurnOrderPanel/Margin/Rows/Scroll"]
+layout_mode = 2
+custom_minimum_size = Vector2(122, 82)

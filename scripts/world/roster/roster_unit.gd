@@ -17,6 +17,8 @@ var appearance
 var persistent_wounds: Array = []
 var total_battles := 0
 var perm_stat_bonuses := {}
+var current_hp := 0
+var dead := false
 
 
 func setup(unit_id: String, unit_name: String, unit_data: UnitData) -> RosterUnit:
@@ -25,6 +27,8 @@ func setup(unit_id: String, unit_name: String, unit_data: UnitData) -> RosterUni
 	base_unit_id = unit_data.unit_id if unit_data != null else ""
 	base_unit_data = unit_data
 	appearance = AppearanceStateScript.new()
+	current_hp = get_max_hp()
+	dead = false
 	return self
 
 
@@ -81,9 +85,67 @@ func compute_total_weight() -> int:
 	return total
 
 
+func is_dead() -> bool:
+	return dead
+
+
+func is_available_for_battle() -> bool:
+	return not dead and current_hp > 0
+
+
+func get_max_hp() -> int:
+	var base_value := base_unit_data.max_hp if base_unit_data != null else 1
+	return maxi(1, base_value + _bonus("max_hp"))
+
+
+func get_attack() -> int:
+	var base_value := base_unit_data.attack if base_unit_data != null else 0
+	return maxi(1, base_value + _bonus("attack"))
+
+
+func get_defense() -> int:
+	var base_value := base_unit_data.defense if base_unit_data != null else 0
+	return maxi(0, base_value + _bonus("defense"))
+
+
+func get_initiative() -> int:
+	var base_value := base_unit_data.initiative if base_unit_data != null else 1
+	return maxi(1, base_value + _bonus("initiative"))
+
+
+func get_action_points() -> int:
+	var base_value := base_unit_data.action_points if base_unit_data != null else 1
+	return maxi(1, base_value + _bonus("action_points"))
+
+
+func get_movement() -> int:
+	var base_value := base_unit_data.movement if base_unit_data != null else 1
+	return maxi(1, base_value + _bonus("movement"))
+
+
+func get_attack_range() -> int:
+	var base_value := base_unit_data.attack_range if base_unit_data != null else 1
+	return maxi(1, base_value + _bonus("attack_range"))
+
+
+func apply_battle_state(remaining_hp: int, died_in_battle: bool) -> void:
+	total_battles += 1
+	if died_in_battle:
+		current_hp = 0
+		dead = true
+		return
+	current_hp = clampi(remaining_hp, 1, get_max_hp())
+	dead = false
+
+
+func revive(restored_hp := 1) -> void:
+	current_hp = clampi(restored_hp, 1, get_max_hp())
+	dead = false
+
+
 func to_army_slot() -> ArmySlotData:
 	var slot := ArmySlotData.new()
-	slot.unit_data = base_unit_data
+	slot.unit_data = _build_battle_unit_data()
 	slot.deploy_hex = Vector2i.ZERO
 	slot.facing = 0
 	slot.equipped = _duplicate_item_map(equipped)
@@ -92,6 +154,7 @@ func to_army_slot() -> ArmySlotData:
 	slot.appearance = appearance.duplicate_state() if appearance != null else null
 	slot.persistent_wounds = _duplicate_wounds(persistent_wounds)
 	slot.roster_unit_id = id
+	slot.starting_hp = current_hp
 	return slot
 
 
@@ -107,7 +170,9 @@ func to_dict() -> Dictionary:
 		"appearance": appearance.to_dict() if appearance != null else {},
 		"persistent_wounds": _serialize_wounds(persistent_wounds),
 		"total_battles": total_battles,
-		"perm_stat_bonuses": perm_stat_bonuses.duplicate(true)
+		"perm_stat_bonuses": perm_stat_bonuses.duplicate(true),
+		"current_hp": current_hp,
+		"dead": dead
 	}
 
 
@@ -129,7 +194,43 @@ static func from_dict(payload: Dictionary, unit_catalog: Dictionary, item_catalo
 	unit.persistent_wounds = _deserialize_wounds(Array(payload.get("persistent_wounds", [])), wound_catalog)
 	unit.total_battles = int(payload.get("total_battles", 0))
 	unit.perm_stat_bonuses = Dictionary(payload.get("perm_stat_bonuses", {})).duplicate(true)
+	unit.current_hp = int(payload.get("current_hp", unit.get_max_hp()))
+	unit.dead = bool(payload.get("dead", false))
+	if unit.dead:
+		unit.current_hp = 0
+	else:
+		unit.current_hp = clampi(unit.current_hp, 1, unit.get_max_hp())
 	return unit
+
+
+func _build_battle_unit_data() -> UnitData:
+	var data := UnitData.new()
+	if base_unit_data == null:
+		return data
+	data.unit_id = base_unit_data.unit_id
+	data.display_name = display_name
+	data.max_hp = get_max_hp()
+	data.attack = get_attack()
+	data.defense = get_defense()
+	data.initiative = get_initiative()
+	data.action_points = get_action_points()
+	data.movement = get_movement()
+	data.attack_range = get_attack_range()
+	data.attack_ap_cost = base_unit_data.attack_ap_cost
+	data.move_ap_cost = base_unit_data.move_ap_cost
+	data.base_morale = base_unit_data.base_morale
+	data.base_fatigue = base_unit_data.base_fatigue
+	data.color = base_unit_data.color
+	data.abilities = base_unit_data.abilities.duplicate()
+	data.allowed_slots = base_unit_data.allowed_slots.duplicate()
+	data.quick_slot_count = base_unit_data.quick_slot_count
+	data.has_secondary_set = base_unit_data.has_secondary_set
+	data.carry_capacity = base_unit_data.carry_capacity
+	return data
+
+
+func _bonus(key: String) -> int:
+	return int(perm_stat_bonuses.get(key, 0))
 
 
 func _duplicate_item_map(source: Dictionary) -> Dictionary:

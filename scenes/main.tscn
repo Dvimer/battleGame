@@ -25,6 +25,11 @@ position = Vector2(1180, 404)
 script = ExtResource("3")
 spawn_id = "hub_house_return"
 
+[node name="HubBarracksReturnSpawn" type="Marker2D" parent="."]
+position = Vector2(360, 392)
+script = ExtResource("3")
+spawn_id = "hub_barracks_return"
+
 [node name="HubCityReturnSpawn" type="Marker2D" parent="."]
 position = Vector2(920, 840)
 script = ExtResource("3")
@@ -35,6 +40,14 @@ position = Vector2(1180, 352)
 script = ExtResource("4")
 target_scene_path = "res://scenes/house_interior.tscn"
 target_spawn_id = "house_entry"
+transition_mode = "auto"
+trigger_radius = 52.0
+
+[node name="BarracksDoorTrigger" type="Node2D" parent="."]
+position = Vector2(360, 332)
+script = ExtResource("4")
+target_scene_path = "res://scenes/barracks.tscn"
+target_spawn_id = "barracks_entry"
 transition_mode = "auto"
 trigger_radius = 52.0
 
@@ -88,3 +101,11 @@ offset_right = 1860.0
 offset_bottom = 1040.0
 theme_override_font_sizes/font_size = 22
 text = "The town is peaceful. Visit the city gate when you are ready for a five-wave run."
+
+[node name="InventoryButton" type="Button" parent="HUD"]
+offset_left = 1812.0
+offset_top = 492.0
+offset_right = 1880.0
+offset_bottom = 588.0
+theme_override_font_sizes/font_size = 28
+text = "I"

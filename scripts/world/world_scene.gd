@@ -18,6 +18,7 @@ const INVENTORY_SCENE := preload("res://scenes/inventory/inventory.tscn")
 @onready var minimap_player_marker: Polygon2D = $HUD/MiniMapPanel/MiniMapFrame/MiniMapViewport/MiniMapRoot/MiniMapPlayerMarker
 @onready var zoom_out_button: Button = $HUD/MiniMapPanel/ZoomOutButton
 @onready var zoom_in_button: Button = $HUD/MiniMapPanel/ZoomInButton
+@onready var inventory_button: Button = $HUD/InventoryButton
 
 var current_hover_settlement := ""
 var world_meta
@@ -60,6 +61,7 @@ func _ready() -> void:
 	player.arena_size = world_meta.world_pixels
 	player.allow_attack = false
 	player.allow_dash = false
+	player.allow_click_move = true
 	player.set_movement_locked(false)
 	player.visible = false
 	player.global_position = game_state.get_world_player_position(world_meta.spawn_pos) if game_state != null else world_meta.spawn_pos
@@ -72,6 +74,10 @@ func _ready() -> void:
 	_chunk_manager().register_world(self)
 	zoom_out_button.pressed.connect(_zoom_out_minimap)
 	zoom_in_button.pressed.connect(_zoom_in_minimap)
+	inventory_button.pressed.connect(func():
+		if inventory_ui != null:
+			inventory_ui.toggle_inventory()
+	)
 	_build_minimap_base()
 	if _fog_of_war() != null:
 		if _fog_of_war().serialize().is_empty():
@@ -123,7 +129,7 @@ func _refresh_hud() -> void:
 	var capital_name = world_meta.capital.settlement_name if world_meta != null and world_meta.capital != null else "Столица"
 	var discovered_count = _game_state().get_discovered_settlement_count() if _game_state() != null else 0
 	status_label.text = localizer.t("world.status", {"capital": capital_name, "count": discovered_count}) if localizer != null else "Текущая столица: %s. Открыто поселений: %d." % [capital_name, discovered_count]
-	hint_label.text = localizer.t("world.hint") if localizer != null else "WASD для движения. Подойди к поселению и нажми E или ЛКМ, чтобы войти."
+	hint_label.text = localizer.t("world.hint") if localizer != null else "ЛКМ или WASD для движения. Подойди к поселению и нажми E или ЛКМ, чтобы войти."
 	if current_hover_settlement == "":
 		quest_label.text = _build_quest_text()
 	else:
@@ -267,6 +273,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		var mouse_event: InputEventMouseButton = event
 		if not minimap_panel.get_global_rect().has_point(mouse_event.position):
+			if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+				player.set_move_target(_screen_to_world(mouse_event.position))
+				get_viewport().set_input_as_handled()
 			return
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_zoom_in_minimap()
@@ -280,6 +289,23 @@ func _world_to_iso(world_position: Vector2) -> Vector2:
 	return Vector2(
 		(world_position.x - world_position.y) * 0.5,
 		(world_position.x + world_position.y) * 0.25
+	)
+
+
+func _iso_to_world(iso_position: Vector2) -> Vector2:
+	return Vector2(
+		iso_position.x + iso_position.y * 2.0,
+		iso_position.y * 2.0 - iso_position.x
+	)
+
+
+func _screen_to_world(screen_position: Vector2) -> Vector2:
+	var viewport_transform := get_viewport().get_canvas_transform()
+	var canvas_position := viewport_transform.affine_inverse() * screen_position
+	var iso_position := canvas_position - world_visual_offset
+	return Vector2(
+		clampf(_iso_to_world(iso_position).x, 36.0, world_meta.world_pixels.x - 36.0),
+		clampf(_iso_to_world(iso_position).y, 36.0, world_meta.world_pixels.y - 36.0)
 	)
 
 

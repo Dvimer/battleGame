@@ -24,6 +24,7 @@ var quick_slots: Array = []
 var secondary_set := {}
 var appearance: Resource
 var persistent_wounds: Array = []
+var roster_unit_id := ""
 
 
 func setup(slot: ArmySlotData, p_team: int, index: int):
@@ -33,7 +34,7 @@ func setup(slot: ArmySlotData, p_team: int, index: int):
 	coord = slot.deploy_hex
 	facing = slot.facing
 	max_hp = data.max_hp
-	hp = max_hp
+	hp = slot.starting_hp if slot.starting_hp >= 0 else max_hp
 	action_points = data.action_points
 	morale = data.base_morale
 	fatigue = data.base_fatigue
@@ -42,7 +43,8 @@ func setup(slot: ArmySlotData, p_team: int, index: int):
 	secondary_set = Dictionary(slot.secondary_set).duplicate(true)
 	appearance = slot.appearance
 	persistent_wounds = Array(slot.persistent_wounds).duplicate(true)
-	alive = true
+	roster_unit_id = slot.roster_unit_id
+	alive = hp > 0
 	return self
 
 

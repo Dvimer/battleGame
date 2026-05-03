@@ -57,8 +57,21 @@ static func create_context() -> Dictionary:
 		"defender": defender,
 		"environment": battlefield.environment,
 		"return_scene": "res://scenes/main.tscn",
-		"return_spawn_id": "hub_default"
+		"return_spawn_id": "hub_default",
+		"apply_to_roster": false
 	}
+
+
+static func create_context_from_roster(roster_manager: Node) -> Dictionary:
+	var context := create_context()
+	if roster_manager == null or not roster_manager.has_method("create_attacker_army_from_selected_party"):
+		return context
+	var attacker: ArmyData = roster_manager.create_attacker_army_from_selected_party()
+	if attacker == null or attacker.slots.is_empty():
+		return context
+	context["attacker"] = attacker
+	context["apply_to_roster"] = true
+	return context
 
 
 static func _terrain(id: String, title: String, move_cost: int, cover: int, fatigue_delta: int, morale_delta: int, color: Color) -> TerrainData:
