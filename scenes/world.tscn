@@ -1,0 +1,124 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/world_scene.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/world/location_spawner.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/world/explore_tracker.gd" id="4"]
+
+[node name="World" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Chunks" type="Node2D" parent="."]
+
+[node name="PlayerVisual" type="Polygon2D" parent="."]
+color = Color(0.95, 0.42, 0.2, 1)
+polygon = PackedVector2Array(0, -18, 12, -2, 8, 14, -8, 14, -12, -2)
+
+[node name="LocationSpawner" type="Node" parent="."]
+script = ExtResource("3")
+
+[node name="ExploreTracker" type="Node" parent="."]
+script = ExtResource("4")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+enabled = true
+
+[node name="Player" parent="." instance=ExtResource("2")]
+position = Vector2(640, 640)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="TitleLabel" type="Label" parent="HUD"]
+offset_left = 32.0
+offset_top = 24.0
+offset_right = 460.0
+offset_bottom = 66.0
+theme_override_font_sizes/font_size = 30
+text = "Карта мира"
+
+[node name="StatusLabel" type="Label" parent="HUD"]
+offset_left = 32.0
+offset_top = 72.0
+offset_right = 1800.0
+offset_bottom = 108.0
+theme_override_font_sizes/font_size = 22
+text = "Статус мира"
+
+[node name="QuestLabel" type="Label" parent="HUD"]
+offset_left = 32.0
+offset_top = 114.0
+offset_right = 1800.0
+offset_bottom = 150.0
+theme_override_font_sizes/font_size = 22
+text = "Квесты"
+
+[node name="HintLabel" type="Label" parent="HUD"]
+offset_left = 32.0
+offset_top = 1000.0
+offset_right = 1860.0
+offset_bottom = 1040.0
+theme_override_font_sizes/font_size = 22
+text = "Подойди к поселению, чтобы войти."
+
+[node name="MiniMapPanel" type="Panel" parent="HUD"]
+offset_left = 1504.0
+offset_top = 24.0
+offset_right = 1880.0
+offset_bottom = 470.0
+
+[node name="MiniMapTitle" type="Label" parent="HUD/MiniMapPanel"]
+offset_left = 18.0
+offset_top = 14.0
+offset_right = 290.0
+offset_bottom = 44.0
+theme_override_font_sizes/font_size = 20
+text = "Миникарта"
+
+[node name="ZoomOutButton" type="Button" parent="HUD/MiniMapPanel"]
+offset_left = 292.0
+offset_top = 12.0
+offset_right = 332.0
+offset_bottom = 44.0
+text = "-"
+
+[node name="ZoomInButton" type="Button" parent="HUD/MiniMapPanel"]
+offset_left = 336.0
+offset_top = 12.0
+offset_right = 376.0
+offset_bottom = 44.0
+text = "+"
+
+[node name="MiniMapFrame" type="SubViewportContainer" parent="HUD/MiniMapPanel"]
+offset_left = 18.0
+offset_top = 54.0
+offset_right = 358.0
+offset_bottom = 394.0
+stretch = true
+
+[node name="MiniMapViewport" type="SubViewport" parent="HUD/MiniMapPanel/MiniMapFrame"]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(340, 340)
+render_target_update_mode = 4
+
+[node name="MiniMapRoot" type="Node2D" parent="HUD/MiniMapPanel/MiniMapFrame/MiniMapViewport"]
+
+[node name="MiniMapCamera" type="Camera2D" parent="HUD/MiniMapPanel/MiniMapFrame/MiniMapViewport/MiniMapRoot"]
+enabled = true
+position = Vector2(96, 96)
+
+[node name="MiniMapBase" type="Sprite2D" parent="HUD/MiniMapPanel/MiniMapFrame/MiniMapViewport/MiniMapRoot"]
+
+[node name="MiniMapFog" type="Sprite2D" parent="HUD/MiniMapPanel/MiniMapFrame/MiniMapViewport/MiniMapRoot"]
+
+[node name="MiniMapPlayerMarker" type="Polygon2D" parent="HUD/MiniMapPanel/MiniMapFrame/MiniMapViewport/MiniMapRoot"]
+color = Color(1, 0.35, 0.2, 1)
+polygon = PackedVector2Array(0, -8, 6, 6, -6, 6)
+
+[node name="MiniMapHint" type="Label" parent="HUD/MiniMapPanel"]
+offset_left = 18.0
+offset_top = 404.0
+offset_right = 358.0
+offset_bottom = 438.0
+theme_override_font_sizes/font_size = 16
+text = "Туман только на миникарте. Кнопки + и - меняют масштаб."

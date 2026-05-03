@@ -1,0 +1,120 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/battle/battle_controller.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/battle/view/hex_tilemap.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/battle/input_controller.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/battle/turn_manager.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/battle/enemy_ai.gd" id="5"]
+[ext_resource type="Script" path="res://scripts/battle/view/hud.gd" id="6"]
+
+[node name="BattleRoot" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(960, 540)
+enabled = true
+
+[node name="HexTileMap" type="Node2D" parent="."]
+script = ExtResource("2")
+
+[node name="UnitsLayer" type="Node2D" parent="."]
+
+[node name="InputController" type="Node" parent="."]
+script = ExtResource("3")
+
+[node name="TurnManager" type="Node" parent="."]
+script = ExtResource("4")
+
+[node name="EnemyAI" type="Node" parent="."]
+script = ExtResource("5")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+layer = 10
+script = ExtResource("6")
+
+[node name="Panel" type="PanelContainer" parent="HUD"]
+custom_minimum_size = Vector2(430, 430)
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 454.0
+offset_bottom = 454.0
+
+[node name="Margin" type="MarginContainer" parent="HUD/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 16
+
+[node name="Rows" type="VBoxContainer" parent="HUD/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="HUD/Panel/Margin/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Battle"
+autowrap_mode = 3
+
+[node name="Turn" type="Label" parent="HUD/Panel/Margin/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Turn"
+autowrap_mode = 3
+
+[node name="Selected" type="Label" parent="HUD/Panel/Margin/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Selection"
+autowrap_mode = 3
+
+[node name="Terrain" type="Label" parent="HUD/Panel/Margin/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Terrain"
+autowrap_mode = 3
+
+[node name="Forecast" type="Label" parent="HUD/Panel/Margin/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Forecast"
+autowrap_mode = 3
+
+[node name="Log" type="RichTextLabel" parent="HUD/Panel/Margin/Rows"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = false
+fit_content = false
+scroll_active = false
+autowrap_mode = 3
+
+[node name="Actions" type="HBoxContainer" parent="HUD/Panel/Margin/Rows"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Wait" type="Button" parent="HUD/Panel/Margin/Rows/Actions"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "Wait"
+
+[node name="Defend" type="Button" parent="HUD/Panel/Margin/Rows/Actions"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "Defend"
+
+[node name="EndTurn" type="Button" parent="HUD/Panel/Margin/Rows"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "End Turn / R"
+
+[node name="Return" type="Button" parent="HUD/Panel/Margin/Rows"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Return / Restart"
