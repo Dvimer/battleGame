@@ -1,5 +1,7 @@
 extends Node2D
 
+const INVENTORY_SCENE := preload("res://scenes/inventory/inventory.tscn")
+
 @onready var player := $Player
 @onready var player_visual: Polygon2D = $PlayerVisual
 @onready var camera: Camera2D = $Camera2D
@@ -23,6 +25,7 @@ var last_saved_world_position := Vector2(-9999.0, -9999.0)
 var minimap_zoom := 2.4
 var minimap_base_image: Image
 var world_visual_offset := Vector2.ZERO
+var inventory_ui
 
 
 func _localizer() -> Node:
@@ -63,6 +66,9 @@ func _ready() -> void:
 	last_saved_world_position = player.global_position
 	world_visual_offset = Vector2(world_meta.world_pixels.y * 0.5 + 220.0, 140.0)
 	$Chunks.position = world_visual_offset
+	inventory_ui = INVENTORY_SCENE.instantiate()
+	add_child(inventory_ui)
+	inventory_ui.open_state_changed.connect(_on_inventory_state_changed)
 	_chunk_manager().register_world(self)
 	zoom_out_button.pressed.connect(_zoom_out_minimap)
 	zoom_in_button.pressed.connect(_zoom_in_minimap)
@@ -87,6 +93,9 @@ func _exit_tree() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if Input.is_action_just_pressed("inventory") and inventory_ui != null:
+		inventory_ui.toggle_inventory()
+		return
 	var chunk_manager = _chunk_manager()
 	if chunk_manager != null:
 		chunk_manager.update_for_player(player.global_position)
@@ -251,6 +260,8 @@ func _zoom_out_minimap() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if inventory_ui != null and inventory_ui.is_open():
+		return
 	if minimap_panel == null:
 		return
 	if event is InputEventMouseButton and event.pressed:
@@ -270,3 +281,7 @@ func _world_to_iso(world_position: Vector2) -> Vector2:
 		(world_position.x - world_position.y) * 0.5,
 		(world_position.x + world_position.y) * 0.25
 	)
+
+
+func _on_inventory_state_changed(is_open: bool) -> void:
+	player.set_movement_locked(is_open)

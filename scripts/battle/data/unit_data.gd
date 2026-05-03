@@ -15,3 +15,8 @@ class_name UnitData
 @export var base_morale := 0
 @export var base_fatigue := 0
 @export var color := Color("dce9f2")
+@export var abilities: Array[String] = []
+@export var allowed_slots: Array[int] = []
+@export var quick_slot_count := 0
+@export var has_secondary_set := false
+@export var carry_capacity := 30

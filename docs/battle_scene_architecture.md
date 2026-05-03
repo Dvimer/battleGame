@@ -33,26 +33,26 @@ scripts/battle/
   input_controller.gd          # перевод клика → команда
   enemy_ai.gd                  # AI противника (вынесен из юнита)
   hex/
-    hex_coord.gd               # static helpers: axial↔pixel, distance, neighbors, line
-    hex_grid.gd                # модель: cells[Vector2i] → HexCell
-    hex_cell.gd                # Resource или класс: terrain ref, occupant, cover
-    pathfinder.gd              # A* по гексам с учётом movement_cost
+	hex_coord.gd               # static helpers: axial↔pixel, distance, neighbors, line
+	hex_grid.gd                # модель: cells[Vector2i] → HexCell
+	hex_cell.gd                # Resource или класс: terrain ref, occupant, cover
+	pathfinder.gd              # A* по гексам с учётом movement_cost
   domain/
-    battle_state.gd            # текущее состояние боя (ход, фаза, победа)
-    unit_instance.gd           # runtime-юнит: hp, fatigue, morale, facing, position
-    ability_runtime.gd         # выполнение способности (target, effects)
-    damage_calculator.gd       # формулы урона (с фланг/высота/мораль)
+	battle_state.gd            # текущее состояние боя (ход, фаза, победа)
+	unit_instance.gd           # runtime-юнит: hp, fatigue, morale, facing, position
+	ability_runtime.gd         # выполнение способности (target, effects)
+	damage_calculator.gd       # формулы урона (с фланг/высота/мораль)
   data/
-    terrain_data.gd            # Resource: terrain_id, move_cost, cover, vision_mod, art
-    unit_data.gd               # Resource: stats, abilities[], faction, sprite, sounds
-    ability_data.gd            # Resource: range, AP cost, damage type, effects
-    army_data.gd               # Resource: units: Array[ArmySlotData]
-    army_slot_data.gd          # Resource: unit_data, level, equipment, deploy_hex
-    battlefield_data.gd        # Resource: layout (size, hex_terrain_map), weather, time
+	terrain_data.gd            # Resource: terrain_id, move_cost, cover, vision_mod, art
+	unit_data.gd               # Resource: stats, abilities[], faction, sprite, sounds
+	ability_data.gd            # Resource: range, AP cost, damage type, effects
+	army_data.gd               # Resource: units: Array[ArmySlotData]
+	army_slot_data.gd          # Resource: unit_data, level, equipment, deploy_hex
+	battlefield_data.gd        # Resource: layout (size, hex_terrain_map), weather, time
   view/
-    hex_tilemap.gd             # рисует сетку, подсвечивает доступные/атакуемые клетки
-    unit_view.gd               # визуал одного юнита (анимации, поворот к facing)
-    hud.gd                     # панели юнитов, очередь ходов, лог боя
+	hex_tilemap.gd             # рисует сетку, подсвечивает доступные/атакуемые клетки
+	unit_view.gd               # визуал одного юнита (анимации, поворот к facing)
+	hud.gd                     # панели юнитов, очередь ходов, лог боя
 
 scenes/battle/
   battle.tscn                  # корневая сцена
@@ -371,6 +371,72 @@ BattleRoot (Node2D, battle_controller.gd)
 3. **Возврат**: после боя — обратно в hub, `BattleContext.on_finished` вызван с корректным результатом.
 4. **Edge cases**: пустая армия (graceful fail), все юниты одной стороны мертвы (`battle_finished` сигналит победителя), путь заблокирован (pathfinder возвращает пустой массив, UI не даёт ход).
 5. **Юнит-тесты домена** (опц., через GUT или встроенный): `HexCoord.distance`, `Pathfinder.find_path`, `DamageCalculator.compute` для типовых случаев — фронт/фланг/тыл, разный terrain.
+
+## Контракт боя с системой экипировки
+
+Сам инвентарь, ростер, лагерь, крафт и кастомизация — **внешние** системы, доступные только из мира. В бой они не приносятся, и эта сцена ничего о них не знает. Полная архитектура — отдельный документ [docs/inventory_and_roster_architecture.md](inventory_and_roster_architecture.md).
+
+Здесь фиксируется только то, что нужно от боевой сцены, чтобы внешние системы потом легли без рефакторинга. Это контракт, не реализация.
+
+### Что бой получает на входе
+
+`ArmySlotData` уже описан как обёртка над юнитом — он же является точкой, где внешний слой передаёт «что надето». Поля, которые бой просто принимает и не интерпретирует:
+
+```gdscript
+# ArmySlotData (расширение существующих полей)
+@export var equipped: Dictionary = {}          # Slot(int) -> ItemInstance | null
+@export var quick_slots: Array = []            # Array[ItemInstance | null]
+@export var appearance: Resource = null        # AppearanceState | null
+@export var persistent_wounds: Array = []      # Array[StatusEffect] — раны, переехавшие из прошлого боя
+```
+
+`ItemInstance`, `AppearanceState`, `StatusEffect.persist_after_battle` определяются во внешних системах. Бою нужно лишь корректно их прочитать при сборке `UnitInstance` и вернуть дельту в `BattleResult`.
+
+### Что обязан предоставлять бой (хуки)
+
+Эти точки должны существовать в MVP-коде, даже если внутри они пустые:
+
+1. **`UnitInstance.equipped`, `UnitInstance.quick_slots`** — поля заполняются из `ArmySlotData` при сборке. В MVP допустимо пустые словари/массивы.
+2. **`UnitInstance.get_combat_abilities() -> Array[AbilityData]`** — единственный источник способностей для HUD ActionBar и EnemyAI. В MVP возвращает `data.abilities`. Позже сюда примешаются оружейные `attack_abilities` и синтезированные из `quick_slots` (через `ConsumableData.use_ability`). **Критично**: ни HUD, ни AI не должны читать `data.abilities` напрямую — иначе при добавлении экипировки кнопки/решения будут расходиться.
+3. **`UnitInstance.compute_armor()`, `compute_total_weight()`, `compute_initiative()`, `compute_max_fatigue()`** — производные стат-функции. В MVP игнорируют пустую экипировку и возвращают базу из `UnitData`. Все потребители (`DamageCalculator`, `TurnManager`) зовут именно их.
+4. **`AbilityData.allowed_weapon_classes: Array[String]`** — поле есть с MVP, пустой массив трактуется как «доступно всегда». Когда появятся `WeaponData.weapon_class`, фильтр включается без правок логики.
+5. **`StatusEffect.persist_after_battle: bool`** — флаг в data. На `battle_finished` контроллер собирает все эффекты с этим флагом из выживших юнитов в `BattleResult.persistent_wounds_per_unit`.
+6. **`BattleResult`** — структура передаваемая в `BattleContext.on_finished`. Минимум полей с MVP, чтобы внешний слой не переписывался при добавлении инвентаря:
+
+```gdscript
+class_name BattleResult
+var winner_team: int                           # -1 ничья, 0 attacker, 1 defender
+var survivors_per_team: Dictionary = {}        # team -> Array[unit_id]
+var killed: Array = []                         # Array[unit_id]
+var persistent_wounds_per_unit: Dictionary = {}# unit_id -> Array[StatusEffect]
+var durability_delta: Dictionary = {}          # ItemInstance -> Δdurability
+var charges_delta: Dictionary = {}             # ItemInstance -> Δcharges
+var pending_loot: Array = []                   # Array[ItemInstance] — то что выпало с врагов
+```
+
+В MVP заполняется только `winner_team` и `killed`/`survivors`. Остальное остаётся пустым — но **поля присутствуют**, чтобы консумер (`RosterManager.apply_battle_result(result)` во внешнем слое) не зависел от формы данных.
+
+### Что бой делает с прочностью и зарядами
+
+`DamageCalculator.compute(...)` при обработке попадания вызывает на оружии и броне виртуальный метод `tick_wear(amount)`. В MVP `ItemInstance` отсутствует — метод не вызывается. Когда экипировка появится, изменения накапливаются в `BattleResult.durability_delta`, **не** в самом `ItemInstance` (бой не мутирует «персистентные» объекты роста — это работа `RosterManager`).
+
+Аналогично для расходников: использование quick-slot’а инкрементит `BattleResult.charges_delta[item_instance] -= 1`. Сам объект не трогается.
+
+### Что бой делает с лутом
+
+При смерти юнита `BattleState` бросает кости по `unit.data.loot_table` и складывает результат в `BattleResult.pending_loot`. Никакой UI добычи в самой боевой сцене — это задача внешнего экрана после возврата.
+
+### Сводка минимальных правок MVP-кода под этот контракт
+
+Только то, что трогает файлы боя:
+
+- `UnitInstance`: добавить поля `equipped`, `quick_slots`, методы `get_combat_abilities`, `compute_armor`, `compute_total_weight`, `compute_initiative`, `compute_max_fatigue`. Тела заглушечные.
+- `ArmySlotData`: добавить поля `equipped`, `quick_slots`, `appearance`, `persistent_wounds` (необязательные).
+- `AbilityData`: добавить поле `allowed_weapon_classes: Array[String]`.
+- `BattleResult` (новый файл `scripts/battle/domain/battle_result.gd`): со всеми полями выше.
+- `BattleContext.on_finished` ожидает `BattleResult`, не `Dictionary`.
+
+Никаких новых ItemData/WeaponData/RosterUnit/CampManager в боевом коде. Они полностью вне сцены боя.
 
 ## Открытые вопросы (на этап имплементации, не блокируют план)
 

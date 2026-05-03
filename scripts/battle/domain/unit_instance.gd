@@ -19,6 +19,11 @@ var fatigue := 0
 var alive := true
 var defending := false
 var waited_this_round := false
+var equipped := {}
+var quick_slots: Array = []
+var secondary_set := {}
+var appearance: Resource
+var persistent_wounds: Array = []
 
 
 func setup(slot: ArmySlotData, p_team: int, index: int):
@@ -32,6 +37,11 @@ func setup(slot: ArmySlotData, p_team: int, index: int):
 	action_points = data.action_points
 	morale = data.base_morale
 	fatigue = data.base_fatigue
+	equipped = Dictionary(slot.equipped).duplicate(true)
+	quick_slots = Array(slot.quick_slots).duplicate(true)
+	secondary_set = Dictionary(slot.secondary_set).duplicate(true)
+	appearance = slot.appearance
+	persistent_wounds = Array(slot.persistent_wounds).duplicate(true)
 	alive = true
 	return self
 
@@ -100,3 +110,40 @@ func take_damage(amount: int, result := {}) -> void:
 
 func display_name() -> String:
 	return data.display_name if data != null else "Unit"
+
+
+func get_combat_abilities() -> Array[String]:
+	return data.abilities.duplicate() if data != null else []
+
+
+func compute_armor() -> int:
+	var armor := 0
+	for item in equipped.values():
+		if item == null or item.data == null:
+			continue
+		if str(item.data.item_class) == "armor":
+			armor += int(item.data.armor_value)
+		elif str(item.data.item_class) == "shield":
+			armor += int(item.data.block_value)
+	return armor
+
+
+func compute_total_weight() -> int:
+	var total := 0
+	for item in equipped.values():
+		if item != null and item.data != null:
+			total += int(item.data.weight)
+	for item in quick_slots:
+		if item != null and item.data != null:
+			total += int(item.data.weight)
+	return total
+
+
+func compute_initiative() -> int:
+	var base_value := data.initiative if data != null else 0
+	return maxi(1, base_value - compute_total_weight())
+
+
+func compute_max_fatigue() -> int:
+	var base_value := 12 + (data.base_fatigue if data != null else 0)
+	return maxi(1, base_value - int(floor(compute_total_weight() * 0.5)))

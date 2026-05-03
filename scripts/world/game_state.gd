@@ -21,11 +21,22 @@ func _quest_manager() -> Node:
 	return get_node_or_null("/root/QuestManager")
 
 
+func _roster_inventory() -> Node:
+	return get_node_or_null("/root/RosterInventory")
+
+
+func _roster_manager() -> Node:
+	return get_node_or_null("/root/RosterManager")
+
+
 func ensure_loaded() -> void:
 	if loaded:
 		return
 	loaded = true
-	_begin_new_session()
+	if FileAccess.file_exists(SAVE_PATH):
+		load_game()
+	else:
+		_begin_new_session()
 
 
 func save_game() -> void:
@@ -44,7 +55,9 @@ func save_game() -> void:
 		"fog": Marshalls.raw_to_base64(_fog_of_war().serialize()),
 		"world_tiles": [world_meta.world_tiles.x, world_meta.world_tiles.y],
 		"tile_size": world_meta.config.tile_size,
-		"visibility_radius": world_meta.config.visibility_radius_tiles
+		"visibility_radius": world_meta.config.visibility_radius_tiles,
+		"roster_inventory": _roster_inventory().to_dict() if _roster_inventory() != null else {},
+		"roster_manager": _roster_manager().to_dict() if _roster_manager() != null else {}
 	}
 	var file = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file != null:
@@ -56,13 +69,17 @@ func _begin_new_session() -> void:
 	has_world_player_position = false
 	discovered_settlements.clear()
 	active_quest_titles.clear()
+	var roster_inventory := _roster_inventory()
+	if roster_inventory != null:
+		roster_inventory.reset_defaults()
+	var roster_manager := _roster_manager()
+	if roster_manager != null:
+		roster_manager.reset_defaults()
 	var fog = _fog_of_war()
 	var world_meta = _world_generator().get_world_meta()
 	if fog != null:
 		fog.reset_for_world(world_meta)
 	_apply_discovered_settlements()
-	if FileAccess.file_exists(SAVE_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
 
 
 func load_game() -> void:
@@ -95,6 +112,12 @@ func load_game() -> void:
 			int(data.get("tile_size", 64)),
 			int(data.get("visibility_radius", 5))
 		)
+	var roster_manager := _roster_manager()
+	if roster_manager != null:
+		roster_manager.load_from_dict(Dictionary(data.get("roster_manager", {})))
+	var roster_inventory := _roster_inventory()
+	if roster_inventory != null:
+		roster_inventory.load_from_dict(Dictionary(data.get("roster_inventory", {})), roster_manager.item_catalog if roster_manager != null else {})
 
 
 func set_world_player_position(value: Vector2, save_immediately := false) -> void:

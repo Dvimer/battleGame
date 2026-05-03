@@ -7,6 +7,7 @@ const WORKSHOP_POS := Vector2(620.0, 280.0)
 const HOUSE_POS := Vector2(1180.0, 220.0)
 const CITY_GATE_POS := Vector2(960.0, 150.0)
 const INTERACT_RADIUS := 90.0
+const INVENTORY_SCENE := preload("res://scenes/inventory/inventory.tscn")
 
 @onready var player := $Player
 @onready var camera: Camera2D = $Camera2D
@@ -21,6 +22,7 @@ var nearest_hotspot := ""
 var banner_timer := 0.0
 var current_banner_key := ""
 var current_banner_params := {}
+var inventory_ui
 
 
 func _world_state() -> Node:
@@ -51,6 +53,9 @@ func _ready() -> void:
 	if scene_router != null:
 		scene_router.apply_spawn(player, player.global_position)
 	camera.position = player.global_position
+	inventory_ui = INVENTORY_SCENE.instantiate()
+	add_child(inventory_ui)
+	inventory_ui.open_state_changed.connect(_on_inventory_state_changed)
 
 	if menu_manager != null and not menu_manager.menu_state_changed.is_connected(_on_menu_state_changed):
 		menu_manager.menu_state_changed.connect(_on_menu_state_changed)
@@ -74,6 +79,16 @@ func _physics_process(delta: float) -> void:
 
 	var menu_manager := _menu_manager()
 	var menu_open: bool = menu_manager != null and menu_manager.is_open()
+	if Input.is_action_just_pressed("inventory"):
+		if menu_open and menu_manager != null:
+			menu_manager.close_menu()
+		inventory_ui.toggle_inventory()
+		queue_redraw()
+		return
+	if inventory_ui != null and inventory_ui.is_open():
+		prompt_label.text = "Inventory open. Press I or Esc to close it."
+		queue_redraw()
+		return
 	nearest_hotspot = _find_nearest_hotspot()
 	var localizer := _localizer()
 
@@ -360,7 +375,15 @@ func _open_world_map() -> void:
 
 
 func _on_menu_state_changed(is_open: bool) -> void:
-	player.set_movement_locked(is_open)
+	player.set_movement_locked(is_open or (inventory_ui != null and inventory_ui.is_open()))
+	if not is_open:
+		_refresh_labels()
+
+
+func _on_inventory_state_changed(is_open: bool) -> void:
+	var menu_manager := _menu_manager()
+	var menu_open: bool = menu_manager != null and menu_manager.is_open()
+	player.set_movement_locked(is_open or menu_open)
 	if not is_open:
 		_refresh_labels()
 
