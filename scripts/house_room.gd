@@ -5,6 +5,7 @@ const DOOR_POS := Vector2(640.0, 620.0)
 const BED_POS := Vector2(330.0, 250.0)
 const DESK_POS := Vector2(910.0, 250.0)
 const INTERACT_RADIUS := 72.0
+const SCENE_PATH := "res://scenes/house_interior.tscn"
 
 @onready var player := $Player
 @onready var camera: Camera2D = $Camera2D
@@ -14,6 +15,7 @@ const INTERACT_RADIUS := 72.0
 
 var banner_timer := 0.0
 var banner_text := ""
+var last_saved_position := Vector2(-9999.0, -9999.0)
 
 
 func _world_state() -> Node:
@@ -28,14 +30,24 @@ func _scene_router() -> Node:
 	return get_node_or_null("/root/SceneRouter")
 
 
+func _game_state() -> Node:
+	return get_node_or_null("/root/GameState")
+
+
 func _ready() -> void:
 	player.arena_size = ROOM_SIZE
 	player.allow_attack = false
 	player.allow_dash = false
 	player.set_movement_locked(false)
+	var game_state := _game_state()
+	if game_state != null:
+		game_state.ensure_loaded()
+		game_state.set_current_scene(SCENE_PATH)
 	var scene_router := _scene_router()
 	if scene_router != null:
-		scene_router.apply_spawn(player, player.global_position)
+		var fallback_position: Vector2 = game_state.get_scene_player_position(SCENE_PATH, player.global_position) if game_state != null else player.global_position
+		scene_router.apply_spawn(player, fallback_position)
+	last_saved_position = player.global_position
 	var localizer := _localizer()
 	if localizer != null and not localizer.language_changed.is_connected(_on_language_changed):
 		localizer.language_changed.connect(_on_language_changed)
@@ -49,6 +61,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	camera.position = player.global_position
 	banner_timer = maxf(banner_timer - delta, 0.0)
+	_maybe_store_scene_position()
 	var nearest := _nearest_spot()
 	var localizer := _localizer()
 	if nearest == "":
@@ -95,6 +108,24 @@ func _on_language_changed(_language: String) -> void:
 		hint_label.text = localizer.t("house.hint.garden") if localizer != null else hint_label.text
 	else:
 		hint_label.text = localizer.t("house.hint.default") if localizer != null else hint_label.text
+
+
+func _exit_tree() -> void:
+	var game_state := _game_state()
+	if game_state != null:
+		game_state.set_current_scene(SCENE_PATH)
+		game_state.set_scene_player_position(SCENE_PATH, player.global_position)
+		game_state.save_game()
+
+
+func _maybe_store_scene_position() -> void:
+	if player.global_position.distance_to(last_saved_position) < 48.0:
+		return
+	last_saved_position = player.global_position
+	var game_state := _game_state()
+	if game_state != null:
+		game_state.set_current_scene(SCENE_PATH)
+		game_state.set_scene_player_position(SCENE_PATH, player.global_position)
 
 
 func _draw() -> void:

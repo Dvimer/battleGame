@@ -1,6 +1,7 @@
 extends Node2D
 
 const INVENTORY_SCENE := preload("res://scenes/inventory/inventory.tscn")
+const SCENE_PATH := "res://scenes/world.tscn"
 
 @onready var player := $Player
 @onready var player_visual: Polygon2D = $PlayerVisual
@@ -19,8 +20,10 @@ const INVENTORY_SCENE := preload("res://scenes/inventory/inventory.tscn")
 @onready var zoom_out_button: Button = $HUD/MiniMapPanel/ZoomOutButton
 @onready var zoom_in_button: Button = $HUD/MiniMapPanel/ZoomInButton
 @onready var inventory_button: Button = $HUD/InventoryButton
+@onready var interact_button: Button = $HUD/InteractButton
 
 var current_hover_settlement := ""
+var current_hover_resource := ""
 var world_meta
 var last_saved_world_position := Vector2(-9999.0, -9999.0)
 var minimap_zoom := 2.4
@@ -53,11 +56,20 @@ func _game_state() -> Node:
 	return get_node_or_null("/root/GameState")
 
 
+func _menu_manager() -> Node:
+	return get_node_or_null("/root/MenuManager")
+
+
+func _scene_router() -> Node:
+	return get_node_or_null("/root/SceneRouter")
+
+
 func _ready() -> void:
 	world_meta = _world_generator().get_world_meta()
 	var game_state = _game_state()
 	if game_state != null:
 		game_state.ensure_loaded()
+		game_state.set_current_scene(SCENE_PATH)
 	player.arena_size = world_meta.world_pixels
 	player.allow_attack = false
 	player.allow_dash = false
@@ -65,12 +77,18 @@ func _ready() -> void:
 	player.set_movement_locked(false)
 	player.visible = false
 	player.global_position = game_state.get_world_player_position(world_meta.spawn_pos) if game_state != null else world_meta.spawn_pos
+	var scene_router := _scene_router()
+	if scene_router != null:
+		scene_router.apply_spawn(player, player.global_position)
 	last_saved_world_position = player.global_position
 	world_visual_offset = Vector2(world_meta.world_pixels.y * 0.5 + 220.0, 140.0)
 	$Chunks.position = world_visual_offset
 	inventory_ui = INVENTORY_SCENE.instantiate()
 	add_child(inventory_ui)
 	inventory_ui.open_state_changed.connect(_on_inventory_state_changed)
+	var menu_manager := _menu_manager()
+	if menu_manager != null and not menu_manager.menu_state_changed.is_connected(_on_menu_state_changed):
+		menu_manager.menu_state_changed.connect(_on_menu_state_changed)
 	_chunk_manager().register_world(self)
 	zoom_out_button.pressed.connect(_zoom_out_minimap)
 	zoom_in_button.pressed.connect(_zoom_in_minimap)
@@ -78,6 +96,7 @@ func _ready() -> void:
 		if inventory_ui != null:
 			inventory_ui.toggle_inventory()
 	)
+	interact_button.pressed.connect(_interact_nearest)
 	_build_minimap_base()
 	if _fog_of_war() != null:
 		if _fog_of_war().serialize().is_empty():
@@ -91,6 +110,8 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	var game_state = _game_state()
 	if game_state != null:
+		game_state.set_current_scene(SCENE_PATH)
+		game_state.set_scene_player_position(SCENE_PATH, player.global_position)
 		game_state.set_world_player_position(player.global_position)
 		game_state.save_game()
 	var chunk_manager = _chunk_manager()
@@ -100,6 +121,9 @@ func _exit_tree() -> void:
 
 func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("inventory") and inventory_ui != null:
+		var menu_manager := _menu_manager()
+		if menu_manager != null and menu_manager.is_open():
+			menu_manager.close_menu()
 		inventory_ui.toggle_inventory()
 		return
 	var chunk_manager = _chunk_manager()
@@ -114,10 +138,16 @@ func _physics_process(_delta: float) -> void:
 
 func _refresh_hover_state() -> void:
 	current_hover_settlement = ""
+	current_hover_resource = ""
 	for settlement in get_tree().get_nodes_in_group("world_settlements"):
 		if settlement.has_method("is_player_near") and settlement.call("is_player_near", player.global_position):
 			current_hover_settlement = str(settlement.call("get_display_name"))
 			break
+	if current_hover_settlement == "":
+		for resource_node in get_tree().get_nodes_in_group("world_resource_nodes"):
+			if resource_node.has_method("is_player_near") and resource_node.call("is_player_near", player.global_position):
+				current_hover_resource = str(resource_node.call("get_display_name"))
+				break
 	_refresh_hud()
 
 
@@ -129,9 +159,11 @@ func _refresh_hud() -> void:
 	var capital_name = world_meta.capital.settlement_name if world_meta != null and world_meta.capital != null else "Столица"
 	var discovered_count = _game_state().get_discovered_settlement_count() if _game_state() != null else 0
 	status_label.text = localizer.t("world.status", {"capital": capital_name, "count": discovered_count}) if localizer != null else "Текущая столица: %s. Открыто поселений: %d." % [capital_name, discovered_count]
-	hint_label.text = localizer.t("world.hint") if localizer != null else "ЛКМ или WASD для движения. Подойди к поселению и нажми E или ЛКМ, чтобы войти."
-	if current_hover_settlement == "":
+	hint_label.text = localizer.t("world.hint") if localizer != null else "ЛКМ или WASD для движения. Подойди к поселению или источнику и нажми E."
+	if current_hover_settlement == "" and current_hover_resource == "":
 		quest_label.text = _build_quest_text()
+	elif current_hover_resource != "":
+		quest_label.text = "Рядом источник: %s. Открой его, чтобы посмотреть добычу и собрать ресурс." % current_hover_resource
 	else:
 		quest_label.text = localizer.t("world.near", {"value": current_hover_settlement}) if localizer != null else "Рядом: %s. Это точка входа в локацию." % current_hover_settlement
 
@@ -149,12 +181,32 @@ func _build_quest_text() -> String:
 	return localizer.t("world.quest.some", {"value": ", ".join(quests)}) if localizer != null else "Квесты: %s" % ", ".join(quests)
 
 
+func _interact_nearest() -> void:
+	if inventory_ui != null and inventory_ui.is_open():
+		return
+	var menu_manager := _menu_manager()
+	if menu_manager != null and menu_manager.is_open():
+		return
+	for resource_node in get_tree().get_nodes_in_group("world_resource_nodes"):
+		if resource_node.has_method("is_player_near") and resource_node.call("is_player_near", player.global_position):
+			if resource_node.has_method("open_resource_menu"):
+				resource_node.call("open_resource_menu")
+			return
+	for settlement in get_tree().get_nodes_in_group("world_settlements"):
+		if settlement.has_method("is_player_near") and settlement.call("is_player_near", player.global_position):
+			if settlement.has_method("enter_settlement"):
+				settlement.call("enter_settlement")
+			return
+
+
 func _maybe_store_world_position() -> void:
 	if player.global_position.distance_to(last_saved_world_position) < 96.0:
 		return
 	last_saved_world_position = player.global_position
 	var game_state = _game_state()
 	if game_state != null:
+		game_state.set_current_scene(SCENE_PATH)
+		game_state.set_scene_player_position(SCENE_PATH, player.global_position)
 		game_state.set_world_player_position(player.global_position)
 
 
@@ -194,7 +246,8 @@ func _build_minimap_base() -> void:
 		var color = Color("f1d48a") if settlement.settlement_type == "capital" else Color("dce9f2")
 		_plot_dot(image, settlement.world_tile, color, 2)
 	for location in world_meta.locations:
-		_plot_dot(image, location.world_tile, Color("f08a5d"), 1)
+		var color := Color(str(location.metadata.get("color", "f08a5d")))
+		_plot_dot(image, location.world_tile, color, 1)
 	minimap_base_image = image
 	minimap_base.texture = ImageTexture.create_from_image(image)
 	minimap_base.centered = true
@@ -268,6 +321,9 @@ func _zoom_out_minimap() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if inventory_ui != null and inventory_ui.is_open():
 		return
+	var menu_manager := _menu_manager()
+	if menu_manager != null and menu_manager.is_open():
+		return
 	if minimap_panel == null:
 		return
 	if event is InputEventMouseButton and event.pressed:
@@ -310,4 +366,9 @@ func _screen_to_world(screen_position: Vector2) -> Vector2:
 
 
 func _on_inventory_state_changed(is_open: bool) -> void:
-	player.set_movement_locked(is_open)
+	var menu_manager := _menu_manager()
+	player.set_movement_locked(is_open or (menu_manager != null and menu_manager.is_open()))
+
+
+func _on_menu_state_changed(is_open: bool) -> void:
+	player.set_movement_locked(is_open or (inventory_ui != null and inventory_ui.is_open()))

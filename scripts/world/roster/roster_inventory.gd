@@ -32,7 +32,7 @@ func add(item) -> bool:
 
 
 func remove(item) -> void:
-	var index := items.find(item)
+	var index: int = items.find(item)
 	if index == -1:
 		return
 	items.remove_at(index)

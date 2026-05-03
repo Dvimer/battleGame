@@ -4,6 +4,7 @@ const ROOM_SIZE := Vector2(1480.0, 900.0)
 const DOOR_POS := Vector2(740.0, 760.0)
 const BUNKS_POS := Vector2(280.0, 220.0)
 const TRAINING_POS := Vector2(1120.0, 250.0)
+const SCENE_PATH := "res://scenes/barracks.tscn"
 
 @onready var player := $Player
 @onready var camera: Camera2D = $Camera2D
@@ -26,6 +27,7 @@ var recruit_ids: Array[String] = []
 var selected_party_unit_id := ""
 var selected_recruit_id := ""
 var panel_open := true
+var last_saved_position := Vector2(-9999.0, -9999.0)
 
 
 func _scene_router() -> Node:
@@ -50,9 +52,15 @@ func _ready() -> void:
 	player.allow_dash = false
 	player.allow_click_move = true
 	player.set_movement_locked(false)
+	var game_state := _game_state()
+	if game_state != null:
+		game_state.ensure_loaded()
+		game_state.set_current_scene(SCENE_PATH)
 	var scene_router := _scene_router()
 	if scene_router != null:
-		scene_router.apply_spawn(player, player.global_position)
+		var fallback_position: Vector2 = game_state.get_scene_player_position(SCENE_PATH, player.global_position) if game_state != null else player.global_position
+		scene_router.apply_spawn(player, fallback_position)
+	last_saved_position = player.global_position
 	title_label.text = "Казарма ополчения"
 	prompt_label.text = "ЛКМ по полу двигает. Esc или крестик скрывают список. Дверь внизу выводит обратно в город."
 	hint_label.text = "Выбирай рекрута справа. Invite добавляет его в отряд, Replace меняет выбранного бойца, ПКМ по бойцу увольняет."
@@ -76,6 +84,7 @@ func _ready() -> void:
 
 func _physics_process(_delta: float) -> void:
 	camera.position = player.global_position
+	_maybe_store_scene_position()
 
 
 func _input(event: InputEvent) -> void:
@@ -296,7 +305,27 @@ func _set_panel_open(is_open: bool) -> void:
 func _save_game() -> void:
 	var game_state := _game_state()
 	if game_state != null:
+		game_state.set_current_scene(SCENE_PATH)
+		game_state.set_scene_player_position(SCENE_PATH, player.global_position)
 		game_state.save_game()
+
+
+func _exit_tree() -> void:
+	var game_state := _game_state()
+	if game_state != null:
+		game_state.set_current_scene(SCENE_PATH)
+		game_state.set_scene_player_position(SCENE_PATH, player.global_position)
+		game_state.save_game()
+
+
+func _maybe_store_scene_position() -> void:
+	if player.global_position.distance_to(last_saved_position) < 64.0:
+		return
+	last_saved_position = player.global_position
+	var game_state := _game_state()
+	if game_state != null:
+		game_state.set_current_scene(SCENE_PATH)
+		game_state.set_scene_player_position(SCENE_PATH, player.global_position)
 
 
 func _on_party_selected(index: int) -> void:

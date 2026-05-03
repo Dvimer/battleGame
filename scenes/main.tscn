@@ -77,6 +77,14 @@ offset_bottom = 146.0
 theme_override_font_sizes/font_size = 22
 text = "Town status"
 
+[node name="ResourceLabel" type="Label" parent="HUD"]
+offset_left = 32.0
+offset_top = 152.0
+offset_right = 1880.0
+offset_bottom = 184.0
+theme_override_font_sizes/font_size = 20
+text = "Склад: дерево 0 | руда 0 | травы 0 | камень 0 | шкуры 0 | глина 0 | уголь 0 | лом 0"
+
 [node name="CenterBanner" type="Label" parent="HUD"]
 offset_left = 500.0
 offset_top = 26.0
@@ -109,3 +117,11 @@ offset_right = 1880.0
 offset_bottom = 588.0
 theme_override_font_sizes/font_size = 28
 text = "I"
+
+[node name="InteractButton" type="Button" parent="HUD"]
+offset_left = 1812.0
+offset_top = 600.0
+offset_right = 1880.0
+offset_bottom = 696.0
+theme_override_font_sizes/font_size = 28
+text = "E"

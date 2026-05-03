@@ -1,12 +1,15 @@
 extends Node
 
 const SAVE_PATH := "user://world_save.json"
+const DEFAULT_SCENE_PATH := "res://scenes/world.tscn"
 
 var loaded := false
 var world_player_position := Vector2.ZERO
 var has_world_player_position := false
 var discovered_settlements := {}
 var active_quest_titles: Array = []
+var current_scene_path := DEFAULT_SCENE_PATH
+var scene_player_positions := {}
 
 
 func _world_generator() -> Node:
@@ -27,6 +30,10 @@ func _roster_inventory() -> Node:
 
 func _roster_manager() -> Node:
 	return get_node_or_null("/root/RosterManager")
+
+
+func _resource_manager() -> Node:
+	return get_node_or_null("/root/ResourceManager")
 
 
 func ensure_loaded() -> void:
@@ -74,8 +81,11 @@ func save_game() -> void:
 		"world_tiles": [world_meta.world_tiles.x, world_meta.world_tiles.y],
 		"tile_size": world_meta.config.tile_size,
 		"visibility_radius": world_meta.config.visibility_radius_tiles,
+		"current_scene_path": current_scene_path,
+		"scene_player_positions": scene_player_positions.duplicate(true),
 		"roster_inventory": _roster_inventory().to_dict() if _roster_inventory() != null else {},
-		"roster_manager": _roster_manager().to_dict() if _roster_manager() != null else {}
+		"roster_manager": _roster_manager().to_dict() if _roster_manager() != null else {},
+		"resource_manager": _resource_manager().to_dict() if _resource_manager() != null else {}
 	}
 	var file = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file != null:
@@ -87,12 +97,17 @@ func _begin_new_session() -> void:
 	has_world_player_position = false
 	discovered_settlements.clear()
 	active_quest_titles.clear()
+	current_scene_path = DEFAULT_SCENE_PATH
+	scene_player_positions.clear()
 	var roster_inventory := _roster_inventory()
 	if roster_inventory != null:
 		roster_inventory.reset_defaults()
 	var roster_manager := _roster_manager()
 	if roster_manager != null:
 		roster_manager.reset_defaults()
+	var resource_manager := _resource_manager()
+	if resource_manager != null:
+		resource_manager.reset_defaults()
 	var fog = _fog_of_war()
 	var world_meta = _world_generator().get_world_meta()
 	if fog != null:
@@ -114,6 +129,8 @@ func load_game() -> void:
 	active_quest_titles.clear()
 	for title in Array(data.get("quests", [])):
 		active_quest_titles.append(str(title))
+	current_scene_path = str(data.get("current_scene_path", DEFAULT_SCENE_PATH))
+	scene_player_positions = Dictionary(data.get("scene_player_positions", {})).duplicate(true)
 	has_world_player_position = bool(data.get("has_world_player_position", false))
 	var saved_position = data.get("world_player_position", [0, 0])
 	if saved_position is Array and saved_position.size() >= 2:
@@ -136,6 +153,9 @@ func load_game() -> void:
 	var roster_inventory := _roster_inventory()
 	if roster_inventory != null:
 		roster_inventory.load_from_dict(Dictionary(data.get("roster_inventory", {})), roster_manager.item_catalog if roster_manager != null else {})
+	var resource_manager := _resource_manager()
+	if resource_manager != null:
+		resource_manager.load_from_dict(Dictionary(data.get("resource_manager", {})))
 
 
 func set_world_player_position(value: Vector2, save_immediately := false) -> void:
@@ -143,6 +163,35 @@ func set_world_player_position(value: Vector2, save_immediately := false) -> voi
 	has_world_player_position = true
 	if save_immediately:
 		save_game()
+
+
+func set_current_scene(scene_path: String, save_immediately := false) -> void:
+	if scene_path == "":
+		return
+	current_scene_path = scene_path
+	if save_immediately:
+		save_game()
+
+
+func get_current_scene() -> String:
+	return current_scene_path if current_scene_path != "" else DEFAULT_SCENE_PATH
+
+
+func set_scene_player_position(scene_path: String, value: Vector2, save_immediately := false) -> void:
+	if scene_path == "":
+		return
+	scene_player_positions[scene_path] = [value.x, value.y]
+	if save_immediately:
+		save_game()
+
+
+func get_scene_player_position(scene_path: String, default_value: Vector2) -> Vector2:
+	if not scene_player_positions.has(scene_path):
+		return default_value
+	var saved = scene_player_positions[scene_path]
+	if saved is Array and saved.size() >= 2:
+		return Vector2(float(saved[0]), float(saved[1]))
+	return default_value
 
 
 func get_world_player_position(default_value: Vector2) -> Vector2:

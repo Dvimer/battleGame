@@ -303,14 +303,14 @@ func _on_slot_pressed(slot_id: int) -> void:
 
 func _assign_item_to_slot(unit, slot_id: int, item):
 	if _is_belt_slot(slot_id):
-		var index := slot_id - ItemDataScript.Slot.BELT_1
+		var index: int = slot_id - ItemDataScript.Slot.BELT_1
 		return unit.assign_quick_slot(index, item)
 	return unit.equip(slot_id, item)
 
 
 func _remove_item_from_slot(unit, slot_id: int):
 	if _is_belt_slot(slot_id):
-		var index := slot_id - ItemDataScript.Slot.BELT_1
+		var index: int = slot_id - ItemDataScript.Slot.BELT_1
 		if index < 0 or index >= unit.quick_slots.size():
 			return null
 		return unit.assign_quick_slot(index, null)
@@ -331,7 +331,7 @@ func _slot_available_for_unit(unit, slot_id: int) -> bool:
 	if unit == null or unit.base_unit_data == null:
 		return false
 	if _is_belt_slot(slot_id):
-		var index := slot_id - ItemDataScript.Slot.BELT_1
+		var index: int = slot_id - ItemDataScript.Slot.BELT_1
 		return index >= 0 and index < unit.get_quick_slot_count()
 	return unit.base_unit_data.allowed_slots.is_empty() or unit.base_unit_data.allowed_slots.has(slot_id)
 
@@ -340,7 +340,7 @@ func _item_in_slot(unit, slot_id: int):
 	if unit == null:
 		return null
 	if _is_belt_slot(slot_id):
-		var index := slot_id - ItemDataScript.Slot.BELT_1
+		var index: int = slot_id - ItemDataScript.Slot.BELT_1
 		if index < 0 or index >= unit.quick_slots.size():
 			return null
 		return unit.quick_slots[index]

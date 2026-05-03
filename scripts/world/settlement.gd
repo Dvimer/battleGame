@@ -31,7 +31,7 @@ func _physics_process(_delta: float) -> void:
 		return
 	if not is_player_near(player.global_position):
 		return
-	if Input.is_action_just_pressed("interact") or Input.is_action_just_pressed("attack"):
+	if Input.is_action_just_pressed("interact"):
 		enter_settlement()
 
 

@@ -25,9 +25,11 @@ func _ready() -> void:
 
 func _on_continue_pressed() -> void:
 	var game_state := _game_state()
+	var target_scene := WORLD_SCENE
 	if game_state != null:
 		game_state.continue_game()
-	get_tree().change_scene_to_file(WORLD_SCENE)
+		target_scene = game_state.get_current_scene()
+	get_tree().change_scene_to_file(target_scene)
 
 
 func _on_new_game_pressed() -> void:

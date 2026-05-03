@@ -10,22 +10,26 @@ const CITY_GATE_POS := Vector2(960.0, 150.0)
 const PATROL_POS := Vector2(1600.0, 210.0)
 const INTERACT_RADIUS := 90.0
 const INVENTORY_SCENE := preload("res://scenes/inventory/inventory.tscn")
+const SCENE_PATH := "res://scenes/main.tscn"
 
 @onready var player := $Player
 @onready var camera: Camera2D = $Camera2D
 @onready var bank_label: Label = $HUD/BankLabel
 @onready var chest_label: Label = $HUD/ChestLabel
 @onready var town_label: Label = $HUD/TownLabel
+@onready var resource_label: Label = $HUD/ResourceLabel
 @onready var center_banner: Label = $HUD/CenterBanner
 @onready var prompt_label: Label = $HUD/PromptLabel
 @onready var hint_label: Label = $HUD/HintLabel
 @onready var inventory_button: Button = $HUD/InventoryButton
+@onready var interact_button: Button = $HUD/InteractButton
 
 var nearest_hotspot := ""
 var banner_timer := 0.0
 var current_banner_key := ""
 var current_banner_params := {}
 var inventory_ui
+var last_saved_position := Vector2(-9999.0, -9999.0)
 
 
 func _world_state() -> Node:
@@ -44,19 +48,29 @@ func _scene_router() -> Node:
 	return get_node_or_null("/root/SceneRouter")
 
 
+func _resource_manager() -> Node:
+	return get_node_or_null("/root/ResourceManager")
+
+
 func _ready() -> void:
 	var world_state := _world_state()
 	var menu_manager := _menu_manager()
+	var game_state := get_node_or_null("/root/GameState")
 
 	player.arena_size = HUB_SIZE
 	player.allow_attack = false
 	player.allow_dash = false
 	player.allow_click_move = true
 	player.set_movement_locked(false)
+	if game_state != null:
+		game_state.ensure_loaded()
+		game_state.set_current_scene(SCENE_PATH)
 	var scene_router := _scene_router()
 	if scene_router != null:
-		scene_router.apply_spawn(player, player.global_position)
+		var fallback_position: Vector2 = game_state.get_scene_player_position(SCENE_PATH, player.global_position) if game_state != null else player.global_position
+		scene_router.apply_spawn(player, fallback_position)
 	camera.position = player.global_position
+	last_saved_position = player.global_position
 	inventory_ui = INVENTORY_SCENE.instantiate()
 	add_child(inventory_ui)
 	inventory_ui.open_state_changed.connect(_on_inventory_state_changed)
@@ -67,12 +81,16 @@ func _ready() -> void:
 		if inventory_ui != null:
 			inventory_ui.toggle_inventory()
 	)
+	interact_button.pressed.connect(_interact_nearest_hotspot)
 
 	if menu_manager != null and not menu_manager.menu_state_changed.is_connected(_on_menu_state_changed):
 		menu_manager.menu_state_changed.connect(_on_menu_state_changed)
 	var localizer := _localizer()
 	if localizer != null and not localizer.language_changed.is_connected(_on_language_changed):
 		localizer.language_changed.connect(_on_language_changed)
+	var resource_manager := _resource_manager()
+	if resource_manager != null and not resource_manager.storage_changed.is_connected(_refresh_labels):
+		resource_manager.storage_changed.connect(_refresh_labels)
 
 	_refresh_labels()
 	if world_state != null:
@@ -87,6 +105,7 @@ func _physics_process(delta: float) -> void:
 	banner_timer = maxf(banner_timer - delta, 0.0)
 	if banner_timer <= 0.0:
 		center_banner.text = ""
+	_maybe_store_scene_position()
 
 	var menu_manager := _menu_manager()
 	var menu_open: bool = menu_manager != null and menu_manager.is_open()
@@ -114,7 +133,7 @@ func _physics_process(delta: float) -> void:
 		var hotspot_name := _hotspot_name(nearest_hotspot)
 		prompt_label.text = localizer.t("base.prompt.near", {"value": hotspot_name}) if localizer != null else "Press E or left click near %s." % hotspot_name
 
-	if (Input.is_action_just_pressed("interact") or Input.is_action_just_pressed("attack")) and nearest_hotspot != "":
+	if Input.is_action_just_pressed("interact") and nearest_hotspot != "":
 		_open_hotspot(nearest_hotspot)
 
 	queue_redraw()
@@ -171,6 +190,17 @@ func _open_hotspot(hotspot_id: String) -> void:
 			_start_patrol_battle()
 
 
+func _interact_nearest_hotspot() -> void:
+	if inventory_ui != null and inventory_ui.is_open():
+		return
+	var menu_manager := _menu_manager()
+	if menu_manager != null and menu_manager.is_open():
+		return
+	nearest_hotspot = _find_nearest_hotspot()
+	if nearest_hotspot != "":
+		_open_hotspot(nearest_hotspot)
+
+
 func _open_menu(title: String, body: String, actions: Array, closable := true) -> void:
 	var menu_manager := _menu_manager()
 	if menu_manager == null:
@@ -193,15 +223,16 @@ func _open_chest_menu() -> void:
 
 	var body := ""
 	var actions: Array = []
+	var resources_block := _resource_storage_text()
 	if world_state.pending_chest_essence > 0:
-		body = localizer.t("base.menu.chest.body_full", {"value": world_state.pending_chest_essence}) if localizer != null else "[b]City returns[/b]\nThe crate hums with %d essence waiting to be banked." % world_state.pending_chest_essence
+		body = (localizer.t("base.menu.chest.body_full", {"value": world_state.pending_chest_essence}) if localizer != null else "[b]City returns[/b]\nThe crate hums with %d essence waiting to be banked." % world_state.pending_chest_essence) + "\n\n[b]Склад ресурсов[/b]\n" + resources_block
 		actions.append({
 			"label": localizer.t("base.menu.chest.collect", {"value": world_state.pending_chest_essence}) if localizer != null else "Collect %d essence" % world_state.pending_chest_essence,
 			"variant": "success",
 			"callback": Callable(self, "_collect_chest")
 		})
 	else:
-		body = localizer.t("base.menu.chest.empty") if localizer != null else "The chest is empty. Clear the city waves to send new rewards home."
+		body = (localizer.t("base.menu.chest.empty") if localizer != null else "The chest is empty. Clear the city waves to send new rewards home.") + "\n\n[b]Склад ресурсов[/b]\n" + resources_block
 		actions.append({
 			"label": localizer.t("base.menu.chest.empty_action") if localizer != null else "Nothing to collect right now",
 			"variant": "neutral"
@@ -262,7 +293,7 @@ func _open_workshop_menu() -> void:
 
 	var forge_text: String = localizer.t("base.menu.workshop.built") if world_state.forge_built and localizer != null else (localizer.t("base.menu.workshop.missing") if localizer != null else ("Built" if world_state.forge_built else "Missing"))
 	var garden_text: String = localizer.t("base.menu.workshop.built") if world_state.garden_built and localizer != null else (localizer.t("base.menu.workshop.missing") if localizer != null else ("Built" if world_state.garden_built else "Missing"))
-	var body: String = localizer.t("base.menu.workshop.body", {"forge": forge_text, "garden": garden_text}) if localizer != null else "[b]Town workshop[/b]\nForge: %s\nGarden: %s\n\nThe forge improves expedition payouts. The garden adds a small blessing to each run." % [forge_text, garden_text]
+	var body: String = (localizer.t("base.menu.workshop.body", {"forge": forge_text, "garden": garden_text}) if localizer != null else "[b]Town workshop[/b]\nForge: %s\nGarden: %s\n\nThe forge improves expedition payouts. The garden adds a small blessing to each run." % [forge_text, garden_text]) + "\n\n[b]Материалы на складе[/b]\n" + _resource_storage_text()
 	_open_menu(localizer.t("base.menu.workshop.title") if localizer != null else "Workshop Board", body, actions)
 
 
@@ -438,6 +469,7 @@ func _refresh_labels() -> void:
 
 	bank_label.text = localizer.t("base.bank_essence", {"value": world_state.bank_essence}) if localizer != null else "Bank Essence: %d" % world_state.bank_essence
 	chest_label.text = localizer.t("base.chest_ready", {"value": world_state.pending_chest_essence}) if localizer != null else "Chest: %d ready to collect" % world_state.pending_chest_essence
+	resource_label.text = _resource_hud_text()
 	var status_parts: Array[String] = []
 	status_parts.append(localizer.t("base.forge_online") if world_state.forge_built and localizer != null else (localizer.t("base.forge_offline") if localizer != null else "Forge offline"))
 	status_parts.append(localizer.t("base.garden_grown") if world_state.garden_built and localizer != null else (localizer.t("base.garden_empty") if localizer != null else "Garden empty"))
@@ -446,6 +478,27 @@ func _refresh_labels() -> void:
 		status_parts.append(localizer.t("base.queued", {"value": queued}) if localizer != null else "Queued: %s" % queued)
 	town_label.text = " | ".join(status_parts)
 	hint_label.text = localizer.t("base.hint") if localizer != null else "The town is peaceful. Visit the city gate when you are ready for a five-wave run."
+
+
+func _resource_hud_text() -> String:
+	var resource_manager := _resource_manager()
+	if resource_manager == null:
+		return "Склад ресурсов: недоступен"
+	return "Склад: дерево %d | руда %d | травы %d | камень %d | шкуры %d | глина %d | уголь %d | лом %d" % [
+		resource_manager.get_resource_amount("wood"),
+		resource_manager.get_resource_amount("ore"),
+		resource_manager.get_resource_amount("herbs"),
+		resource_manager.get_resource_amount("stone"),
+		resource_manager.get_resource_amount("hides"),
+		resource_manager.get_resource_amount("clay"),
+		resource_manager.get_resource_amount("coal"),
+		resource_manager.get_resource_amount("scrap")
+	]
+
+
+func _resource_storage_text() -> String:
+	var resource_manager := _resource_manager()
+	return resource_manager.build_storage_summary() if resource_manager != null else "Склад пока пуст."
 
 
 func _show_banner(text: String, duration: float) -> void:
@@ -479,14 +532,30 @@ func _unhandled_input(event: InputEvent) -> void:
 	if menu_manager != null and menu_manager.is_open():
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if _find_nearest_hotspot() != "":
-			return
 		player.set_move_target(_screen_to_world(event.position))
 		get_viewport().set_input_as_handled()
 
 
 func _screen_to_world(screen_position: Vector2) -> Vector2:
 	return get_viewport().get_canvas_transform().affine_inverse() * screen_position
+
+
+func _exit_tree() -> void:
+	var game_state := get_node_or_null("/root/GameState")
+	if game_state != null:
+		game_state.set_current_scene(SCENE_PATH)
+		game_state.set_scene_player_position(SCENE_PATH, player.global_position)
+		game_state.save_game()
+
+
+func _maybe_store_scene_position() -> void:
+	if player.global_position.distance_to(last_saved_position) < 96.0:
+		return
+	last_saved_position = player.global_position
+	var game_state := get_node_or_null("/root/GameState")
+	if game_state != null:
+		game_state.set_current_scene(SCENE_PATH)
+		game_state.set_scene_player_position(SCENE_PATH, player.global_position)
 
 
 func _draw() -> void:
