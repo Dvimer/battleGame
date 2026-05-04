@@ -30,6 +30,9 @@ var minimap_zoom := 2.4
 var minimap_base_image: Image
 var world_visual_offset := Vector2.ZERO
 var inventory_ui
+var _discovery_banner: Label
+var _discovery_banner_timer := 0.0
+var _discovery_banner_settlement := ""
 
 # Time HUD — создаётся в _ready() программно
 var _time_day_label: Label
@@ -38,6 +41,10 @@ var _time_period_label: Label
 var _time_pause_button: Button
 var _time_play_button: Button
 var _time_fast_button: Button
+
+# Fog throttle: пересоздаём текстуру только при смене тайла игрока
+var _last_fog_player_tile := Vector2i(-9999, -9999)
+var _fog_texture: ImageTexture
 
 
 func _world_time_manager() -> Node:
@@ -76,6 +83,10 @@ func _scene_router() -> Node:
 	return get_node_or_null("/root/SceneRouter")
 
 
+func _event_bus() -> Node:
+	return get_node_or_null("/root/EventBus")
+
+
 func _ready() -> void:
 	var game_state = _game_state()
 	if game_state != null:
@@ -108,6 +119,9 @@ func _ready() -> void:
 	var localizer := _localizer()
 	if localizer != null and not localizer.language_changed.is_connected(_on_language_changed):
 		localizer.language_changed.connect(_on_language_changed)
+	var event_bus := _event_bus()
+	if event_bus != null and not event_bus.settlement_discovered.is_connected(_on_settlement_discovered):
+		event_bus.settlement_discovered.connect(_on_settlement_discovered)
 	_chunk_manager().register_world(self)
 	zoom_out_button.pressed.connect(_zoom_out_minimap)
 	zoom_in_button.pressed.connect(_zoom_in_minimap)
@@ -116,6 +130,7 @@ func _ready() -> void:
 			inventory_ui.toggle_inventory()
 	)
 	interact_button.pressed.connect(_interact_nearest)
+	_setup_discovery_banner()
 	_setup_time_hud()
 	_apply_world_time_state()
 	_build_minimap_base()
@@ -149,7 +164,8 @@ func _exit_tree() -> void:
 			wtm.unfreeze()
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	_update_discovery_banner(delta)
 	if Input.is_action_just_pressed("inventory") and inventory_ui != null:
 		var menu_manager := _menu_manager()
 		if menu_manager != null and menu_manager.is_open():
@@ -243,14 +259,26 @@ func _maybe_store_world_position() -> void:
 
 func _refresh_minimap_fog() -> void:
 	var fog = _fog_of_war()
-	if fog == null or minimap_fog == null:
+	if fog == null or minimap_fog == null or world_meta == null:
 		return
+	# Обновляем только при смене тайла (избегаем O(world²) пересчёта каждый кадр)
+	var tile_size: int = world_meta.config.tile_size
+	var current_tile := Vector2i(
+		int(player.global_position.x / float(tile_size)),
+		int(player.global_position.y / float(tile_size))
+	)
+	if current_tile == _last_fog_player_tile:
+		return
+	_last_fog_player_tile = current_tile
 	fog.update_from_world_position(player.global_position)
-	var fog_image = fog.build_visibility_image()
-	var texture = ImageTexture.create_from_image(fog_image)
-	minimap_fog.texture = texture
-	minimap_fog.centered = true
-	minimap_fog.position = Vector2(world_meta.world_tiles) * 0.5
+	var fog_image := fog.build_visibility_image()
+	if _fog_texture == null:
+		_fog_texture = ImageTexture.create_from_image(fog_image)
+		minimap_fog.texture = _fog_texture
+		minimap_fog.centered = true
+		minimap_fog.position = Vector2(world_meta.world_tiles) * 0.5
+	else:
+		_fog_texture.update(fog_image)   # переиспользуем GPU-объект, не создаём новый
 
 
 func _refresh_world_visuals() -> void:
@@ -627,3 +655,53 @@ func _time_period_color(period: String) -> Color:
 func _on_language_changed(_language: String) -> void:
 	_refresh_hud()
 	_refresh_time_buttons()
+	if _discovery_banner_timer > 0.0 and _discovery_banner_settlement != "":
+		_show_discovery_banner(_discovery_banner_settlement)
+
+
+func _setup_discovery_banner() -> void:
+	var hud := get_node_or_null("HUD")
+	if hud == null:
+		return
+	_discovery_banner = Label.new()
+	_discovery_banner.name = "DiscoveryBanner"
+	_discovery_banner.anchor_left = 0.5
+	_discovery_banner.anchor_top = 0.0
+	_discovery_banner.anchor_right = 0.5
+	_discovery_banner.anchor_bottom = 0.0
+	_discovery_banner.offset_left = -280.0
+	_discovery_banner.offset_top = 128.0
+	_discovery_banner.offset_right = 280.0
+	_discovery_banner.offset_bottom = 168.0
+	_discovery_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_discovery_banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_discovery_banner.visible = false
+	_discovery_banner.add_theme_font_size_override("font_size", 28)
+	_discovery_banner.add_theme_color_override("font_color", Color("f5f1e8"))
+	hud.add_child(_discovery_banner)
+
+
+func _update_discovery_banner(delta: float) -> void:
+	if _discovery_banner == null or not _discovery_banner.visible:
+		return
+	_discovery_banner_timer = maxf(0.0, _discovery_banner_timer - delta)
+	if _discovery_banner_timer <= 0.0:
+		_discovery_banner.visible = false
+		_discovery_banner_settlement = ""
+
+
+func _on_settlement_discovered(settlement_name: String) -> void:
+	if settlement_name == "":
+		return
+	_show_discovery_banner(settlement_name)
+	_refresh_hud()
+
+
+func _show_discovery_banner(settlement_name: String) -> void:
+	if _discovery_banner == null:
+		return
+	_discovery_banner_settlement = settlement_name
+	var localizer := _localizer()
+	_discovery_banner.text = localizer.t("world.banner.discovered", {"value": settlement_name}) if localizer != null else "Открыто поселение: %s" % settlement_name
+	_discovery_banner.visible = true
+	_discovery_banner_timer = 2.2

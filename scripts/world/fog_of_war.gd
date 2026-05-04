@@ -8,6 +8,7 @@ var world_tiles := Vector2i.ZERO
 var tile_size := 64
 var visibility_radius_tiles := 5
 var states := PackedByteArray()
+var _visible_indices := PackedInt32Array()   # кэш: только те тайлы, что сейчас STATE_VISIBLE
 
 
 func reset_for_world(world_meta) -> void:
@@ -15,27 +16,35 @@ func reset_for_world(world_meta) -> void:
 	tile_size = world_meta.config.tile_size
 	visibility_radius_tiles = world_meta.config.visibility_radius_tiles
 	states.resize(world_tiles.x * world_tiles.y)
-	for index in range(states.size()):
-		states[index] = STATE_UNSEEN
+	states.fill(STATE_UNSEEN)
+	_visible_indices.clear()
 
 
 func update_from_world_position(world_position: Vector2) -> void:
 	if world_tiles == Vector2i.ZERO:
 		return
-	for index in range(states.size()):
-		if states[index] == STATE_VISIBLE:
-			states[index] = STATE_SEEN
-	var center = Vector2i(
+	# Сбрасываем только ранее видимые тайлы (O(radius²) вместо O(world²))
+	for idx in _visible_indices:
+		if states[idx] == STATE_VISIBLE:
+			states[idx] = STATE_SEEN
+	_visible_indices.clear()
+
+	var center := Vector2i(
 		clampi(int(floor(world_position.x / float(tile_size))), 0, world_tiles.x - 1),
 		clampi(int(floor(world_position.y / float(tile_size))), 0, world_tiles.y - 1)
 	)
+	var radius_sq := (visibility_radius_tiles + 0.25) * (visibility_radius_tiles + 0.25)
 	for y in range(center.y - visibility_radius_tiles, center.y + visibility_radius_tiles + 1):
 		for x in range(center.x - visibility_radius_tiles, center.x + visibility_radius_tiles + 1):
 			if x < 0 or y < 0 or x >= world_tiles.x or y >= world_tiles.y:
 				continue
-			if Vector2(x - center.x, y - center.y).length() > visibility_radius_tiles + 0.25:
+			var dx := x - center.x
+			var dy := y - center.y
+			if float(dx * dx + dy * dy) > radius_sq:
 				continue
-			states[y * world_tiles.x + x] = STATE_VISIBLE
+			var idx := y * world_tiles.x + x
+			states[idx] = STATE_VISIBLE
+			_visible_indices.append(idx)
 
 
 func build_visibility_image() -> Image:
