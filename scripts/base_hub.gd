@@ -52,6 +52,10 @@ func _resource_manager() -> Node:
 	return get_node_or_null("/root/ResourceManager")
 
 
+func _game_state() -> Node:
+	return get_node_or_null("/root/GameState")
+
+
 func _ready() -> void:
 	var world_state := _world_state()
 	var menu_manager := _menu_manager()
@@ -117,6 +121,13 @@ func _physics_process(delta: float) -> void:
 		return
 	if inventory_ui != null and inventory_ui.is_open():
 		prompt_label.text = "Inventory open. Press I or Esc to close it."
+		queue_redraw()
+		return
+	if Input.is_action_just_pressed("storage"):
+		if menu_open and menu_manager != null:
+			menu_manager.close_menu()
+		else:
+			_open_storage_menu()
 		queue_redraw()
 		return
 	nearest_hotspot = _find_nearest_hotspot()
@@ -331,6 +342,22 @@ func _open_gate_menu() -> void:
 	)
 
 
+func _open_storage_menu() -> void:
+	var localizer := _localizer()
+	var settlement_name := _current_settlement_name()
+	var title: String = localizer.t("base.storage.title", {"value": settlement_name}) if localizer != null else "Склад поселения: %s" % settlement_name
+	var body: String = localizer.t("base.storage.body", {
+		"value": settlement_name,
+		"summary": _resource_storage_text()
+	}) if localizer != null else "[b]%s[/b]\n\n%s" % [settlement_name, _resource_storage_text()]
+	_open_menu(title, body, [
+		{
+			"label": localizer.t("inventory.close") if localizer != null else "Закрыть",
+			"variant": "neutral"
+		}
+	])
+
+
 func _collect_chest() -> void:
 	var world_state := _world_state()
 	var localizer := _localizer()
@@ -467,10 +494,12 @@ func _refresh_labels() -> void:
 		town_label.text = "World state unavailable"
 		return
 
+	var settlement_name := _current_settlement_name()
 	bank_label.text = localizer.t("base.bank_essence", {"value": world_state.bank_essence}) if localizer != null else "Bank Essence: %d" % world_state.bank_essence
 	chest_label.text = localizer.t("base.chest_ready", {"value": world_state.pending_chest_essence}) if localizer != null else "Chest: %d ready to collect" % world_state.pending_chest_essence
-	resource_label.text = _resource_hud_text()
+	resource_label.text = _resource_hud_text(settlement_name)
 	var status_parts: Array[String] = []
+	status_parts.append(settlement_name)
 	status_parts.append(localizer.t("base.forge_online") if world_state.forge_built and localizer != null else (localizer.t("base.forge_offline") if localizer != null else "Forge offline"))
 	status_parts.append(localizer.t("base.garden_grown") if world_state.garden_built and localizer != null else (localizer.t("base.garden_empty") if localizer != null else "Garden empty"))
 	var queued: String = world_state.describe_next_run_bonus()
@@ -480,25 +509,37 @@ func _refresh_labels() -> void:
 	hint_label.text = localizer.t("base.hint") if localizer != null else "The town is peaceful. Visit the city gate when you are ready for a five-wave run."
 
 
-func _resource_hud_text() -> String:
+func _resource_hud_text(settlement_name := "") -> String:
 	var resource_manager := _resource_manager()
 	if resource_manager == null:
 		return "Склад ресурсов: недоступен"
-	return "Склад: дерево %d | руда %d | травы %d | камень %d | шкуры %d | глина %d | уголь %d | лом %d" % [
-		resource_manager.get_resource_amount("wood"),
-		resource_manager.get_resource_amount("ore"),
-		resource_manager.get_resource_amount("herbs"),
-		resource_manager.get_resource_amount("stone"),
-		resource_manager.get_resource_amount("hides"),
-		resource_manager.get_resource_amount("clay"),
-		resource_manager.get_resource_amount("coal"),
-		resource_manager.get_resource_amount("scrap")
+	var city_name := settlement_name if settlement_name != "" else _current_settlement_name()
+	return "%s: дерево %d | руда %d | травы %d | камень %d | шкуры %d | глина %d | уголь %d | лом %d" % [
+		city_name,
+		resource_manager.get_resource_amount("wood", city_name),
+		resource_manager.get_resource_amount("ore", city_name),
+		resource_manager.get_resource_amount("herbs", city_name),
+		resource_manager.get_resource_amount("stone", city_name),
+		resource_manager.get_resource_amount("hides", city_name),
+		resource_manager.get_resource_amount("clay", city_name),
+		resource_manager.get_resource_amount("coal", city_name),
+		resource_manager.get_resource_amount("scrap", city_name)
 	]
 
 
 func _resource_storage_text() -> String:
 	var resource_manager := _resource_manager()
-	return resource_manager.build_storage_summary() if resource_manager != null else "Склад пока пуст."
+	if resource_manager == null:
+		return "Склад пока пуст."
+	var city_name := _current_settlement_name()
+	return "[b]%s[/b]\n%s" % [city_name, resource_manager.build_storage_summary(city_name)]
+
+
+func _current_settlement_name() -> String:
+	var game_state := _game_state()
+	if game_state != null and game_state.has_method("get_current_settlement"):
+		return str(game_state.get_current_settlement())
+	return "Столица"
 
 
 func _show_banner(text: String, duration: float) -> void:

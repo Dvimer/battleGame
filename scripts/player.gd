@@ -49,6 +49,7 @@ var secondary_weapon_id := ""
 var ranged_damage_bonus := 0
 var move_target := Vector2.ZERO
 var has_move_target := false
+var movement_speed_scale := 1.0
 
 
 func _ready() -> void:
@@ -106,6 +107,7 @@ func _physics_process(delta: float) -> void:
 		invulnerability_timer = 0.2
 
 	var speed := DASH_SPEED + dash_speed_bonus if dash_timer > 0.0 else MOVE_SPEED + move_speed_bonus
+	speed *= maxf(0.0, movement_speed_scale)
 	velocity = input_vector * speed
 	global_position += velocity * delta
 	_clamp_to_arena()
@@ -250,6 +252,12 @@ func set_movement_locked(value: bool) -> void:
 		clear_move_target()
 
 
+func set_movement_speed_scale(value: float) -> void:
+	movement_speed_scale = maxf(0.0, value)
+	if movement_speed_scale == 0.0:
+		velocity = Vector2.ZERO
+
+
 func set_move_target(target: Vector2) -> void:
 	move_target = target
 	has_move_target = true
@@ -283,6 +291,7 @@ func reset_for_run(start_position: Vector2) -> void:
 	active_weapon_id = WEAPON_SWORD
 	secondary_weapon_id = ""
 	ranged_damage_bonus = 0
+	movement_speed_scale = 1.0
 	clear_move_target()
 	health_changed.emit(health, max_health)
 	combo_changed.emit(combo_step, 0.0)

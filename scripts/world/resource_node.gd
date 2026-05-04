@@ -53,22 +53,11 @@ func open_resource_menu() -> void:
 	var resource_manager := _resource_manager()
 	if menu_manager == null or resource_manager == null:
 		return
-	var snapshot: Dictionary = resource_manager.get_node_snapshot(location_data)
 	var actions: Array = []
-	if not bool(snapshot.get("claimed", false)):
-		actions.append({
-			"label": "Подключить добычу\nИсточник начнёт работать и копить ресурс по времени.",
-			"variant": "success",
-			"callback": Callable(self, "_claim_source"),
-			"close_on_select": false
-		})
-	else:
-		actions.append({
-			"label": "Собрать ресурс\nПереложить накопленное в городской склад.",
-			"variant": "warning",
-			"callback": Callable(self, "_collect_source"),
-			"close_on_select": false
-		})
+	actions.append({
+		"label": "Добыча идёт\nПолная партия уедет в городской склад автоматически.",
+		"variant": "neutral"
+	})
 	actions.append({
 		"label": "Улучшение\nПока в разработке. Позже здесь появится рост скорости, склада и лимита накопления.",
 		"variant": "neutral"
@@ -80,37 +69,6 @@ func open_resource_menu() -> void:
 		"closable": true,
 		"close_on_backdrop": true
 	})
-
-
-func _claim_source() -> void:
-	var resource_manager := _resource_manager()
-	if resource_manager == null:
-		return
-	resource_manager.claim_node(location_data)
-	call_deferred("open_resource_menu")
-
-
-func _collect_source() -> void:
-	var resource_manager := _resource_manager()
-	if resource_manager == null:
-		return
-	var collected: int = resource_manager.collect_node(location_data)
-	var menu_manager := _menu_manager()
-	if menu_manager != null:
-		var resource_name: String = resource_manager.get_resource_name(str(location_data.metadata.get("resource_type", "wood")))
-		menu_manager.open_menu({
-			"title": "Сбор завершён",
-			"body": "[b]%s[/b]\nВ городской склад отправлено: %d ед." % [resource_name, collected],
-			"actions": [
-				{
-					"label": "Вернуться к источнику",
-					"variant": "success",
-					"callback": Callable(self, "open_resource_menu")
-				}
-			],
-			"closable": true,
-			"close_on_backdrop": true
-		})
 
 
 func _draw() -> void:

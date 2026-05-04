@@ -32,8 +32,12 @@ var world_visual_offset := Vector2.ZERO
 var inventory_ui
 
 # Time HUD — создаётся в _ready() программно
-var _time_label: Label
-var _speed_button: Button
+var _time_day_label: Label
+var _time_clock_label: Label
+var _time_period_label: Label
+var _time_pause_button: Button
+var _time_play_button: Button
+var _time_fast_button: Button
 
 
 func _world_time_manager() -> Node:
@@ -73,11 +77,15 @@ func _scene_router() -> Node:
 
 
 func _ready() -> void:
-	world_meta = _world_generator().get_world_meta()
 	var game_state = _game_state()
 	if game_state != null:
 		game_state.ensure_loaded()
 		game_state.set_current_scene(SCENE_PATH)
+	var world_generator := _world_generator()
+	if world_generator == null:
+		push_error("WorldScene: WorldGenerator autoload is unavailable.")
+		return
+	world_meta = world_generator.get_world_meta()
 	player.arena_size = world_meta.world_pixels
 	player.allow_attack = false
 	player.allow_dash = false
@@ -97,6 +105,9 @@ func _ready() -> void:
 	var menu_manager := _menu_manager()
 	if menu_manager != null and not menu_manager.menu_state_changed.is_connected(_on_menu_state_changed):
 		menu_manager.menu_state_changed.connect(_on_menu_state_changed)
+	var localizer := _localizer()
+	if localizer != null and not localizer.language_changed.is_connected(_on_language_changed):
+		localizer.language_changed.connect(_on_language_changed)
 	_chunk_manager().register_world(self)
 	zoom_out_button.pressed.connect(_zoom_out_minimap)
 	zoom_in_button.pressed.connect(_zoom_in_minimap)
@@ -106,6 +117,7 @@ func _ready() -> void:
 	)
 	interact_button.pressed.connect(_interact_nearest)
 	_setup_time_hud()
+	_apply_world_time_state()
 	_build_minimap_base()
 	if _fog_of_war() != null:
 		if _fog_of_war().serialize().is_empty():
@@ -138,7 +150,6 @@ func _exit_tree() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	_update_time_hud()
 	if Input.is_action_just_pressed("inventory") and inventory_ui != null:
 		var menu_manager := _menu_manager()
 		if menu_manager != null and menu_manager.is_open():
@@ -185,6 +196,7 @@ func _refresh_hud() -> void:
 		quest_label.text = "Рядом источник: %s. Открой его, чтобы посмотреть добычу и собрать ресурс." % current_hover_resource
 	else:
 		quest_label.text = localizer.t("world.near", {"value": current_hover_settlement}) if localizer != null else "Рядом: %s. Это точка входа в локацию." % current_hover_settlement
+	_update_time_hud()
 
 
 func _build_quest_text() -> String:
@@ -355,6 +367,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	var menu_manager := _menu_manager()
 	if menu_manager != null and menu_manager.is_open():
 		return
+	if _is_world_time_stopped():
+		return
 	if minimap_panel == null:
 		return
 	if event is InputEventMouseButton and event.pressed:
@@ -419,67 +433,197 @@ func _setup_time_hud() -> void:
 	var hud := get_node_or_null("HUD")
 	if hud == null:
 		return
-	# Панель времени — правый верхний угол
+	# Панель времени — по центру сверху, как глобальный HUD карты.
 	var panel := PanelContainer.new()
 	panel.name = "TimePanel"
-	panel.anchor_left   = 1.0
+	panel.anchor_left   = 0.5
 	panel.anchor_top    = 0.0
-	panel.anchor_right  = 1.0
+	panel.anchor_right  = 0.5
 	panel.anchor_bottom = 0.0
 	panel.offset_left   = -220.0
-	panel.offset_top    = 8.0
-	panel.offset_right  = -8.0
-	panel.offset_bottom = 62.0
+	panel.offset_top    = 18.0
+	panel.offset_right  = 220.0
+	panel.offset_bottom = 118.0
 	hud.add_child(panel)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 2)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 8)
 	panel.add_child(vbox)
 
-	_time_label = Label.new()
-	_time_label.name = "TimeLabel"
-	_time_label.text = "День 1  ☀ 07:00"
-	_time_label.add_theme_font_size_override("font_size", 14)
-	vbox.add_child(_time_label)
+	var header := HBoxContainer.new()
+	header.alignment = BoxContainer.ALIGNMENT_CENTER
+	header.add_theme_constant_override("separation", 10)
+	vbox.add_child(header)
 
-	_speed_button = Button.new()
-	_speed_button.name = "SpeedButton"
-	_speed_button.text = "▶ ×1   [Space/Tab]"
-	_speed_button.add_theme_font_size_override("font_size", 12)
-	_speed_button.pressed.connect(func(): _cycle_time_speed())
-	vbox.add_child(_speed_button)
+	_time_day_label = Label.new()
+	_time_day_label.name = "TimeDayLabel"
+	_time_day_label.text = "День 1"
+	_time_day_label.add_theme_font_size_override("font_size", 16)
+	header.add_child(_time_day_label)
+
+	_time_clock_label = Label.new()
+	_time_clock_label.name = "TimeClockLabel"
+	_time_clock_label.text = "07:00"
+	_time_clock_label.add_theme_font_size_override("font_size", 22)
+	header.add_child(_time_clock_label)
+
+	_time_period_label = Label.new()
+	_time_period_label.name = "TimePeriodLabel"
+	_time_period_label.text = "День"
+	_time_period_label.add_theme_font_size_override("font_size", 16)
+	header.add_child(_time_period_label)
+
+	var controls := HBoxContainer.new()
+	controls.alignment = BoxContainer.ALIGNMENT_CENTER
+	controls.add_theme_constant_override("separation", 8)
+	vbox.add_child(controls)
+
+	_time_pause_button = Button.new()
+	_time_pause_button.name = "PauseButton"
+	_time_pause_button.custom_minimum_size = Vector2(64.0, 34.0)
+	_time_pause_button.text = "⏸"
+	_time_pause_button.toggle_mode = true
+	_time_pause_button.pressed.connect(func(): _set_time_speed(0.0))
+	controls.add_child(_time_pause_button)
+
+	_time_play_button = Button.new()
+	_time_play_button.name = "PlayButton"
+	_time_play_button.custom_minimum_size = Vector2(64.0, 34.0)
+	_time_play_button.text = "▶"
+	_time_play_button.toggle_mode = true
+	_time_play_button.pressed.connect(func():
+		var wtm := _world_time_manager()
+		if wtm != null and wtm.tuning != null:
+			_set_time_speed(wtm.tuning.speed_normal)
+	)
+	controls.add_child(_time_play_button)
+
+	_time_fast_button = Button.new()
+	_time_fast_button.name = "FastButton"
+	_time_fast_button.custom_minimum_size = Vector2(72.0, 34.0)
+	_time_fast_button.text = "×2"
+	_time_fast_button.toggle_mode = true
+	_time_fast_button.pressed.connect(func():
+		var wtm := _world_time_manager()
+		if wtm != null and wtm.tuning != null:
+			_set_time_speed(wtm.tuning.speed_fast)
+	)
+	controls.add_child(_time_fast_button)
 
 	var wtm := _world_time_manager()
 	if wtm != null:
+		wtm.minute_changed.connect(_on_world_minute_changed)
+		wtm.time_of_day_changed.connect(_on_time_of_day_changed)
 		wtm.speed_changed.connect(_on_time_speed_changed)
+	_update_time_hud()
+	_refresh_time_buttons()
 
 
 func _update_time_hud() -> void:
-	if _time_label == null:
+	if _time_day_label == null or _time_clock_label == null or _time_period_label == null:
 		return
 	var wtm := _world_time_manager()
 	if wtm == null:
 		return
-	_time_label.text = wtm.format_hud()
+	var localizer := _localizer()
+	var day_text: String = localizer.t("world.time.day", {"value": wtm.current_day + 1}) if localizer != null else "День %d" % [wtm.current_day + 1]
+	_time_day_label.text = day_text
+	_time_clock_label.text = "%02d:%02d" % [wtm.current_hour, wtm.current_minute]
+	_time_period_label.text = _localized_time_period(wtm.time_of_day)
+	_time_period_label.modulate = _time_period_color(wtm.time_of_day)
+	_refresh_time_button_tooltips()
 
 
 func _on_time_speed_changed(_new_speed: float) -> void:
-	if _speed_button == null:
-		return
+	_refresh_time_buttons()
+	_apply_world_time_state()
+
+
+func _on_world_minute_changed(_hour: int, _minute: int) -> void:
+	_update_time_hud()
+
+
+func _on_time_of_day_changed(_period: String) -> void:
+	_update_time_hud()
+
+
+func _set_time_speed(speed: float) -> void:
 	var wtm := _world_time_manager()
 	if wtm == null:
 		return
-	_speed_button.text = wtm.format_speed() + "   [Space/Tab]"
+	wtm.set_speed(speed)
 
 
-func _cycle_time_speed() -> void:
-	var wtm := _world_time_manager()
-	if wtm == null:
+func _refresh_time_buttons() -> void:
+	if _time_pause_button == null or _time_play_button == null or _time_fast_button == null:
 		return
-	# Цикл: пауза → 1× → 2× → пауза
-	if wtm.current_speed == 0.0:
-		wtm.set_speed(wtm.tuning.speed_normal)
-	elif wtm.current_speed < wtm.tuning.speed_fast:
-		wtm.set_speed(wtm.tuning.speed_fast)
-	else:
-		wtm.set_speed(0.0)
+	var wtm := _world_time_manager()
+	if wtm == null or wtm.tuning == null:
+		return
+	_time_pause_button.set_pressed_no_signal(is_equal_approx(wtm.current_speed, 0.0))
+	_time_play_button.set_pressed_no_signal(is_equal_approx(wtm.current_speed, wtm.tuning.speed_normal))
+	_time_fast_button.set_pressed_no_signal(wtm.current_speed >= wtm.tuning.speed_fast and not is_equal_approx(wtm.current_speed, 0.0))
+	_refresh_time_button_tooltips()
+
+
+func _refresh_time_button_tooltips() -> void:
+	var localizer := _localizer()
+	if _time_pause_button != null:
+		_time_pause_button.tooltip_text = localizer.t("world.time.stop") if localizer != null else "Остановить время и движение"
+	if _time_play_button != null:
+		_time_play_button.tooltip_text = localizer.t("world.time.play") if localizer != null else "Обычная скорость"
+	if _time_fast_button != null:
+		_time_fast_button.tooltip_text = localizer.t("world.time.fast") if localizer != null else "Ускорить время и движение x2"
+
+
+func _apply_world_time_state() -> void:
+	var wtm := _world_time_manager()
+	if wtm == null or player == null:
+		return
+	var speed_scale := 1.0
+	if wtm.tuning != null and wtm.tuning.speed_normal > 0.0:
+		speed_scale = maxf(0.0, wtm.current_speed / wtm.tuning.speed_normal)
+	player.set_movement_speed_scale(speed_scale)
+	_update_time_hud()
+
+
+func _is_world_time_stopped() -> bool:
+	var wtm := _world_time_manager()
+	return wtm != null and is_equal_approx(wtm.current_speed, 0.0)
+
+
+func _localized_time_period(period: String) -> String:
+	var localizer := _localizer()
+	if localizer == null:
+		match period:
+			"dawn":
+				return "Рассвет"
+			"day":
+				return "День"
+			"dusk":
+				return "Сумерки"
+			"night":
+				return "Ночь"
+			_:
+				return period
+	return localizer.t("world.time.period.%s" % period)
+
+
+func _time_period_color(period: String) -> Color:
+	match period:
+		"dawn":
+			return Color("f4cf88")
+		"day":
+			return Color("c9f58f")
+		"dusk":
+			return Color("f4a982")
+		"night":
+			return Color("91a7ff")
+		_:
+			return Color.WHITE
+
+
+func _on_language_changed(_language: String) -> void:
+	_refresh_hud()
+	_refresh_time_buttons()

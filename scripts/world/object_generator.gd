@@ -9,57 +9,57 @@ const RESOURCE_LIBRARY := {
 	"forest": {
 		"display_name": "Лесной участок",
 		"resource_type": "wood",
-		"yield_per_minute": 1.6,
 		"storage_cap": 64.0,
+		"full_storage_days": 1.0,
 		"description": "Старый лесной участок с удобным подъездом. Даёт дерево для мастерской и будущих построек."
 	},
 	"mine": {
 		"display_name": "Железная шахта",
 		"resource_type": "ore",
-		"yield_per_minute": 1.2,
 		"storage_cap": 48.0,
+		"full_storage_days": 1.25,
 		"description": "Небольшая шахта с рудной жилой. Железо пригодится для оружия, щитов и инструментов."
 	},
 	"herb_field": {
 		"display_name": "Травничий луг",
 		"resource_type": "herbs",
-		"yield_per_minute": 1.4,
 		"storage_cap": 52.0,
+		"full_storage_days": 0.75,
 		"description": "Поле полезных трав. Поддерживает медицину, повязки и будущую алхимию."
 	},
 	"quarry": {
 		"display_name": "Каменоломня",
 		"resource_type": "stone",
-		"yield_per_minute": 1.1,
 		"storage_cap": 60.0,
+		"full_storage_days": 1.5,
 		"description": "Камень для укреплений, мастерских и тяжёлых заготовок."
 	},
 	"hunting_grounds": {
 		"display_name": "Охотничьи угодья",
 		"resource_type": "hides",
-		"yield_per_minute": 1.0,
 		"storage_cap": 40.0,
+		"full_storage_days": 1.0,
 		"description": "Дичь и выделанные шкуры. Подойдут для снаряжения, ремней и лёгкой брони."
 	},
 	"clay_pit": {
 		"display_name": "Глиняный карьер",
 		"resource_type": "clay",
-		"yield_per_minute": 1.0,
 		"storage_cap": 50.0,
+		"full_storage_days": 1.25,
 		"description": "Мягкая глина для ремесла, печей и городского производства."
 	},
 	"coal_vein": {
 		"display_name": "Угольная жила",
 		"resource_type": "coal",
-		"yield_per_minute": 0.9,
 		"storage_cap": 44.0,
+		"full_storage_days": 1.75,
 		"description": "Источник угля для печей и кузнечных работ."
 	},
 	"ruins": {
 		"display_name": "Старые руины",
 		"resource_type": "scrap",
-		"yield_per_minute": 0.8,
 		"storage_cap": 36.0,
+		"full_storage_days": 2.0,
 		"description": "Заброшенные руины, где можно вытаскивать лом, старые детали и редкие находки."
 	}
 }
@@ -135,9 +135,9 @@ func _build_resource_location(source_type: String, biome, tile: Vector2i, config
 		"node_id": "%s_%d_%d" % [source_type, tile.x, tile.y],
 		"source_type": source_type,
 		"resource_type": str(source_def["resource_type"]),
-		"yield_per_minute": float(source_def["yield_per_minute"]),
 		"storage_cap": float(source_def["storage_cap"]),
-		"max_accumulation_minutes": MAX_ACCUMULATION_MINUTES,
+		"full_storage_days": float(source_def.get("full_storage_days", 1.0)),
+		"max_accumulation_minutes": int(round(float(source_def.get("full_storage_days", 1.0)) * 24.0 * 60.0)),
 		"description": str(source_def["description"]),
 		"color": _resource_color_for(source_type)
 	}

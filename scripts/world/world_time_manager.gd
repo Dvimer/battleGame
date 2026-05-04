@@ -19,6 +19,7 @@ signal speed_changed(new_speed: float)
 # ── Tuning ───────────────────────────────────────────────────────────────────
 const TUNING_PATH := "res://resources/world/time_tuning.tres"
 var tuning: TimeTuning
+var _has_deserialized_state := false
 
 # ── Состояние (сохраняется) ──────────────────────────────────────────────────
 ## Суммарное игровое время с начала игры, в игровых часах
@@ -51,31 +52,30 @@ var is_paused: bool:
 
 var time_of_day: String:
 	get:
+		var active_tuning := _ensure_tuning()
 		var h := current_hour
-		if h >= tuning.night_start_hour or h < tuning.dawn_start_hour:
+		if h >= active_tuning.night_start_hour or h < active_tuning.dawn_start_hour:
 			return "night"
-		if h >= tuning.dusk_start_hour:
+		if h >= active_tuning.dusk_start_hour:
 			return "dusk"
-		if h >= tuning.day_start_hour:
+		if h >= active_tuning.day_start_hour:
 			return "day"
 		return "dawn"
 
 # ── Жизненный цикл ───────────────────────────────────────────────────────────
 
 func _ready() -> void:
-	if ResourceLoader.exists(TUNING_PATH):
-		tuning = load(TUNING_PATH) as TimeTuning
-	if tuning == null:
-		tuning = TimeTuning.new()
-		push_warning("WorldTimeManager: time_tuning.tres не найден, используются дефолты.")
-	current_speed = tuning.speed_normal
+	var active_tuning := _ensure_tuning()
+	if not _has_deserialized_state:
+		current_speed = active_tuning.speed_normal
 	set_process(true)
 
 
 func _process(delta: float) -> void:
 	if _freeze_stack > 0 or current_speed == 0.0:
 		return
-	var seconds_per_hour: float = tuning.real_seconds_per_day / 24.0
+	var active_tuning := _ensure_tuning()
+	var seconds_per_hour: float = active_tuning.real_seconds_per_day / 24.0
 	total_hours += (delta * current_speed) / seconds_per_hour
 	_emit_changed_signals()
 
@@ -96,19 +96,21 @@ func set_speed(speed: float) -> void:
 
 ## Переключить паузу / обычная скорость.
 func toggle_pause() -> void:
+	var active_tuning := _ensure_tuning()
 	if current_speed != 0.0:
 		set_speed(0.0)
 	else:
-		set_speed(tuning.speed_normal)
+		set_speed(active_tuning.speed_normal)
 
 ## Переключить 1× / 2×. Если на паузе — возобновить с нормальной скоростью.
 func toggle_fast() -> void:
+	var active_tuning := _ensure_tuning()
 	if current_speed == 0.0:
-		set_speed(tuning.speed_normal)
-	elif current_speed >= tuning.speed_fast:
-		set_speed(tuning.speed_normal)
+		set_speed(active_tuning.speed_normal)
+	elif current_speed >= active_tuning.speed_fast:
+		set_speed(active_tuning.speed_normal)
 	else:
-		set_speed(tuning.speed_fast)
+		set_speed(active_tuning.speed_fast)
 
 ## Пропустить N игровых часов (для стоянки лагерем / лечения).
 func advance_hours(hours: float) -> void:
@@ -123,10 +125,11 @@ func format_hud() -> String:
 
 ## Форматированная строка скорости для кнопок: "⏸" / "▶" / "⏩"
 func format_speed() -> String:
+	var active_tuning := _ensure_tuning()
 	if current_speed == 0.0:
 		return "⏸"
-	if current_speed >= tuning.speed_fast:
-		return "⏩ ×%.0f" % tuning.speed_fast
+	if current_speed >= active_tuning.speed_fast:
+		return "⏩ ×%.0f" % active_tuning.speed_fast
 	return "▶ ×1"
 
 # ── Сохранение / загрузка ─────────────────────────────────────────────────────
@@ -138,8 +141,10 @@ func serialize() -> Dictionary:
 	}
 
 func deserialize(data: Dictionary) -> void:
+	var active_tuning := _ensure_tuning()
 	total_hours   = float(data.get("total_hours", 0.0))
-	current_speed = float(data.get("speed", tuning.speed_normal if tuning != null else 1.0))
+	current_speed = float(data.get("speed", active_tuning.speed_normal))
+	_has_deserialized_state = true
 	# Форсировать переэмиссию всех сигналов после загрузки
 	_prev_minute = -1
 	_prev_hour   = -1
@@ -150,6 +155,7 @@ func deserialize(data: Dictionary) -> void:
 # ── Внутреннее ───────────────────────────────────────────────────────────────
 
 func _emit_changed_signals() -> void:
+	var active_tuning := _ensure_tuning()
 	var m := current_minute
 	var h := current_hour
 	var d := current_day
@@ -163,7 +169,7 @@ func _emit_changed_signals() -> void:
 		_prev_hour = h
 		hour_changed.emit(h)
 		# Ежесуточный тик — ровно в daily_tick_hour
-		if h == tuning.daily_tick_hour:
+		if h == active_tuning.daily_tick_hour:
 			var event_bus := get_node_or_null("/root/EventBus")
 			if event_bus != null:
 				event_bus.day_tick.emit(d)
@@ -175,3 +181,14 @@ func _emit_changed_signals() -> void:
 	if p != _prev_period:
 		_prev_period = p
 		time_of_day_changed.emit(p)
+
+
+func _ensure_tuning() -> TimeTuning:
+	if tuning != null:
+		return tuning
+	if ResourceLoader.exists(TUNING_PATH):
+		tuning = load(TUNING_PATH) as TimeTuning
+	if tuning == null:
+		tuning = TimeTuning.new()
+		push_warning("WorldTimeManager: time_tuning.tres не найден, используются дефолты.")
+	return tuning

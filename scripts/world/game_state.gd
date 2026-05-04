@@ -10,6 +10,7 @@ var discovered_settlements := {}
 var active_quest_titles: Array = []
 var current_scene_path := DEFAULT_SCENE_PATH
 var scene_player_positions := {}
+var current_settlement_name := ""
 
 
 func _world_time_manager() -> Node:
@@ -59,6 +60,9 @@ func start_new_game() -> void:
 	var absolute_path := ProjectSettings.globalize_path(SAVE_PATH)
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(absolute_path)
+	var world_generator := _world_generator()
+	if world_generator != null and world_generator.has_method("start_new_session_world"):
+		world_generator.start_new_session_world()
 	_begin_new_session()
 	save_game()
 
@@ -87,6 +91,7 @@ func save_game() -> void:
 		"visibility_radius": world_meta.config.visibility_radius_tiles,
 		"current_scene_path": current_scene_path,
 		"scene_player_positions": scene_player_positions.duplicate(true),
+		"current_settlement_name": current_settlement_name,
 		"roster_inventory": _roster_inventory().to_dict() if _roster_inventory() != null else {},
 		"roster_manager": _roster_manager().to_dict() if _roster_manager() != null else {},
 		"resource_manager": _resource_manager().to_dict() if _resource_manager() != null else {},
@@ -104,6 +109,7 @@ func _begin_new_session() -> void:
 	active_quest_titles.clear()
 	current_scene_path = DEFAULT_SCENE_PATH
 	scene_player_positions.clear()
+	current_settlement_name = _default_settlement_name()
 	var roster_inventory := _roster_inventory()
 	if roster_inventory != null:
 		roster_inventory.reset_defaults()
@@ -117,9 +123,11 @@ func _begin_new_session() -> void:
 	if world_time_manager != null:
 		world_time_manager.deserialize({})   # сброс на 0
 	var fog = _fog_of_war()
-	var world_meta = _world_generator().get_world_meta()
+	var world_generator := _world_generator()
+	var world_meta = world_generator.get_world_meta() if world_generator != null else null
 	if fog != null:
-		fog.reset_for_world(world_meta)
+		if world_meta != null:
+			fog.reset_for_world(world_meta)
 	_apply_discovered_settlements()
 
 
@@ -139,6 +147,7 @@ func load_game() -> void:
 		active_quest_titles.append(str(title))
 	current_scene_path = str(data.get("current_scene_path", DEFAULT_SCENE_PATH))
 	scene_player_positions = Dictionary(data.get("scene_player_positions", {})).duplicate(true)
+	current_settlement_name = str(data.get("current_settlement_name", _default_settlement_name()))
 	has_world_player_position = bool(data.get("has_world_player_position", false))
 	var saved_position = data.get("world_player_position", [0, 0])
 	if saved_position is Array and saved_position.size() >= 2:
@@ -209,6 +218,19 @@ func get_world_player_position(default_value: Vector2) -> Vector2:
 	return world_player_position if has_world_player_position else default_value
 
 
+func set_current_settlement(settlement_name: String, save_immediately := false) -> void:
+	if settlement_name == "":
+		current_settlement_name = _default_settlement_name()
+	else:
+		current_settlement_name = settlement_name
+	if save_immediately:
+		save_game()
+
+
+func get_current_settlement() -> String:
+	return current_settlement_name if current_settlement_name != "" else _default_settlement_name()
+
+
 func register_settlement_visit(settlement_name: String, save_immediately := false) -> void:
 	if settlement_name == "":
 		return
@@ -238,6 +260,21 @@ func set_active_quest_titles(titles: Array[String], save_immediately := false) -
 
 
 func _apply_discovered_settlements() -> void:
-	var world_meta = _world_generator().get_world_meta()
+	var world_generator := _world_generator()
+	if world_generator == null:
+		return
+	var world_meta = world_generator.get_world_meta()
+	if world_meta == null or world_meta.capital == null:
+		return
 	for settlement in world_meta.settlements:
 		settlement.discovered = settlement.settlement_name == world_meta.capital.settlement_name or discovered_settlements.has(settlement.settlement_name)
+
+
+func _default_settlement_name() -> String:
+	var world_generator := _world_generator()
+	if world_generator == null:
+		return "Столица"
+	var world_meta = world_generator.get_world_meta()
+	if world_meta == null or world_meta.capital == null:
+		return "Столица"
+	return str(world_meta.capital.settlement_name)

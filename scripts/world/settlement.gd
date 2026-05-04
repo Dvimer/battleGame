@@ -54,6 +54,7 @@ func enter_settlement() -> void:
 	var player = get_tree().get_first_node_in_group("player_avatar")
 	var game_state = get_node_or_null("/root/GameState")
 	if game_state != null:
+		game_state.set_current_settlement(settlement_data.settlement_name)
 		if player != null:
 			game_state.set_world_player_position(player.global_position)
 		game_state.register_settlement_visit(settlement_data.settlement_name, true)
