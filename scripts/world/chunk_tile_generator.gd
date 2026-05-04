@@ -27,7 +27,7 @@ func generate(chunk_coord: Vector2i, world_meta) -> Dictionary:
 	for location in world_meta.locations:
 		location_set[location.world_tile] = true
 
-	var chunk_origin := chunk_coord * size
+	var chunk_origin: Vector2i = chunk_coord * size
 	for y in range(size):
 		for x in range(size):
 			var idx := y * size + x
@@ -61,7 +61,7 @@ func _build_road_set(chunk_coord: Vector2i, chunk_size: int, tile_size: int, roa
 	var half := float(tile_size) * 0.5
 	var threshold := float(tile_size) * 0.33
 	var threshold_sq := threshold * threshold
-	var chunk_origin := chunk_coord * chunk_size
+	var chunk_origin: Vector2i = chunk_coord * chunk_size
 
 	for road in roads:
 		for seg_index in range(road.size() - 1):
