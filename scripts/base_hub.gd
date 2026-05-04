@@ -546,6 +546,10 @@ func _exit_tree() -> void:
 		game_state.set_current_scene(SCENE_PATH)
 		game_state.set_scene_player_position(SCENE_PATH, player.global_position)
 		game_state.save_game()
+	# Время было заморожено при входе в поселение — разморозить при выходе
+	var wtm := get_node_or_null("/root/WorldTimeManager")
+	if wtm != null:
+		wtm.unfreeze()
 
 
 func _maybe_store_scene_position() -> void:

@@ -12,6 +12,10 @@ var current_scene_path := DEFAULT_SCENE_PATH
 var scene_player_positions := {}
 
 
+func _world_time_manager() -> Node:
+	return get_node_or_null("/root/WorldTimeManager")
+
+
 func _world_generator() -> Node:
 	return get_node_or_null("/root/WorldGenerator")
 
@@ -85,7 +89,8 @@ func save_game() -> void:
 		"scene_player_positions": scene_player_positions.duplicate(true),
 		"roster_inventory": _roster_inventory().to_dict() if _roster_inventory() != null else {},
 		"roster_manager": _roster_manager().to_dict() if _roster_manager() != null else {},
-		"resource_manager": _resource_manager().to_dict() if _resource_manager() != null else {}
+		"resource_manager": _resource_manager().to_dict() if _resource_manager() != null else {},
+		"world_time": _world_time_manager().serialize() if _world_time_manager() != null else {}
 	}
 	var file = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file != null:
@@ -108,6 +113,9 @@ func _begin_new_session() -> void:
 	var resource_manager := _resource_manager()
 	if resource_manager != null:
 		resource_manager.reset_defaults()
+	var world_time_manager := _world_time_manager()
+	if world_time_manager != null:
+		world_time_manager.deserialize({})   # сброс на 0
 	var fog = _fog_of_war()
 	var world_meta = _world_generator().get_world_meta()
 	if fog != null:
@@ -156,6 +164,9 @@ func load_game() -> void:
 	var resource_manager := _resource_manager()
 	if resource_manager != null:
 		resource_manager.load_from_dict(Dictionary(data.get("resource_manager", {})))
+	var world_time_manager := _world_time_manager()
+	if world_time_manager != null and data.has("world_time"):
+		world_time_manager.deserialize(Dictionary(data.get("world_time", {})))
 
 
 func set_world_player_position(value: Vector2, save_immediately := false) -> void:

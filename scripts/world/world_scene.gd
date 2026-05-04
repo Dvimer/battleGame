@@ -31,6 +31,14 @@ var minimap_base_image: Image
 var world_visual_offset := Vector2.ZERO
 var inventory_ui
 
+# Time HUD — создаётся в _ready() программно
+var _time_label: Label
+var _speed_button: Button
+
+
+func _world_time_manager() -> Node:
+	return get_node_or_null("/root/WorldTimeManager")
+
 
 func _localizer() -> Node:
 	return get_node_or_null("/root/Localizer")
@@ -97,6 +105,7 @@ func _ready() -> void:
 			inventory_ui.toggle_inventory()
 	)
 	interact_button.pressed.connect(_interact_nearest)
+	_setup_time_hud()
 	_build_minimap_base()
 	if _fog_of_war() != null:
 		if _fog_of_war().serialize().is_empty():
@@ -117,9 +126,19 @@ func _exit_tree() -> void:
 	var chunk_manager = _chunk_manager()
 	if chunk_manager != null:
 		chunk_manager.unregister_world(self)
+	# Разморозить то, что заморожено этой сценой (инвентарь / меню).
+	# Freeze от поселений управляется в сценах самих поселений.
+	var wtm := _world_time_manager()
+	if wtm != null:
+		if inventory_ui != null and inventory_ui.is_open():
+			wtm.unfreeze()
+		var menu_manager := _menu_manager()
+		if menu_manager != null and menu_manager.is_open():
+			wtm.unfreeze()
 
 
 func _physics_process(_delta: float) -> void:
+	_update_time_hud()
 	if Input.is_action_just_pressed("inventory") and inventory_ui != null:
 		var menu_manager := _menu_manager()
 		if menu_manager != null and menu_manager.is_open():
@@ -319,6 +338,18 @@ func _zoom_out_minimap() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Пауза / ускорение времени
+	if event is InputEventKey and event.pressed and not event.echo:
+		var wtm := _world_time_manager()
+		if wtm != null:
+			if event.keycode == KEY_SPACE:
+				wtm.toggle_pause()
+				get_viewport().set_input_as_handled()
+				return
+			if event.keycode == KEY_TAB:
+				wtm.toggle_fast()
+				get_viewport().set_input_as_handled()
+				return
 	if inventory_ui != null and inventory_ui.is_open():
 		return
 	var menu_manager := _menu_manager()
@@ -368,7 +399,87 @@ func _screen_to_world(screen_position: Vector2) -> Vector2:
 func _on_inventory_state_changed(is_open: bool) -> void:
 	var menu_manager := _menu_manager()
 	player.set_movement_locked(is_open or (menu_manager != null and menu_manager.is_open()))
+	var wtm := _world_time_manager()
+	if wtm != null:
+		if is_open: wtm.freeze()
+		else:        wtm.unfreeze()
 
 
 func _on_menu_state_changed(is_open: bool) -> void:
 	player.set_movement_locked(is_open or (inventory_ui != null and inventory_ui.is_open()))
+	var wtm := _world_time_manager()
+	if wtm != null:
+		if is_open: wtm.freeze()
+		else:        wtm.unfreeze()
+
+
+# ── Time HUD ─────────────────────────────────────────────────────────────────
+
+func _setup_time_hud() -> void:
+	var hud := get_node_or_null("HUD")
+	if hud == null:
+		return
+	# Панель времени — правый верхний угол
+	var panel := PanelContainer.new()
+	panel.name = "TimePanel"
+	panel.anchor_left   = 1.0
+	panel.anchor_top    = 0.0
+	panel.anchor_right  = 1.0
+	panel.anchor_bottom = 0.0
+	panel.offset_left   = -220.0
+	panel.offset_top    = 8.0
+	panel.offset_right  = -8.0
+	panel.offset_bottom = 62.0
+	hud.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 2)
+	panel.add_child(vbox)
+
+	_time_label = Label.new()
+	_time_label.name = "TimeLabel"
+	_time_label.text = "День 1  ☀ 07:00"
+	_time_label.add_theme_font_size_override("font_size", 14)
+	vbox.add_child(_time_label)
+
+	_speed_button = Button.new()
+	_speed_button.name = "SpeedButton"
+	_speed_button.text = "▶ ×1   [Space/Tab]"
+	_speed_button.add_theme_font_size_override("font_size", 12)
+	_speed_button.pressed.connect(func(): _cycle_time_speed())
+	vbox.add_child(_speed_button)
+
+	var wtm := _world_time_manager()
+	if wtm != null:
+		wtm.speed_changed.connect(_on_time_speed_changed)
+
+
+func _update_time_hud() -> void:
+	if _time_label == null:
+		return
+	var wtm := _world_time_manager()
+	if wtm == null:
+		return
+	_time_label.text = wtm.format_hud()
+
+
+func _on_time_speed_changed(_new_speed: float) -> void:
+	if _speed_button == null:
+		return
+	var wtm := _world_time_manager()
+	if wtm == null:
+		return
+	_speed_button.text = wtm.format_speed() + "   [Space/Tab]"
+
+
+func _cycle_time_speed() -> void:
+	var wtm := _world_time_manager()
+	if wtm == null:
+		return
+	# Цикл: пауза → 1× → 2× → пауза
+	if wtm.current_speed == 0.0:
+		wtm.set_speed(wtm.tuning.speed_normal)
+	elif wtm.current_speed < wtm.tuning.speed_fast:
+		wtm.set_speed(wtm.tuning.speed_fast)
+	else:
+		wtm.set_speed(0.0)

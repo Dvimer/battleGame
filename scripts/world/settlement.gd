@@ -10,6 +10,10 @@ func _scene_router() -> Node:
 	return get_node_or_null("/root/SceneRouter")
 
 
+func _world_time_manager() -> Node:
+	return get_node_or_null("/root/WorldTimeManager")
+
+
 func _event_bus() -> Node:
 	return get_node_or_null("/root/EventBus")
 
@@ -59,6 +63,9 @@ func enter_settlement() -> void:
 			"type": settlement_data.settlement_type,
 			"biome_id": settlement_data.biome_id
 		})
+	var wtm := _world_time_manager()
+	if wtm != null:
+		wtm.freeze()   # разморозится в _exit_tree сцены поселения
 	var scene_router = _scene_router()
 	if scene_router != null:
 		scene_router.go_to_scene(settlement_data.scene_path, settlement_data.spawn_id)

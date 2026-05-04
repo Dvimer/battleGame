@@ -55,7 +55,7 @@ func ensure_node_registered(location_data) -> Dictionary:
 			"claimed": false,
 			"level": 1,
 			"stored_amount": 0.0,
-			"last_tick_unix": Time.get_unix_time_from_system(),
+			"last_game_hour": _current_game_hours(),
 			"max_accumulation_minutes": int(location_data.metadata.get("max_accumulation_minutes", DEFAULT_MAX_ACCUMULATION_MINUTES))
 		}
 	return Dictionary(resource_nodes[node_id])
@@ -78,7 +78,7 @@ func claim_node(location_data) -> bool:
 		return true
 	state["claimed"] = true
 	state["stored_amount"] = 0.0
-	state["last_tick_unix"] = Time.get_unix_time_from_system()
+	state["last_game_hour"] = _current_game_hours()
 	resource_nodes[node_id] = state
 	node_state_changed.emit(node_id)
 	return true
@@ -154,18 +154,26 @@ func _sync_node_state(location_data) -> void:
 	var state := ensure_node_registered(location_data)
 	if state.is_empty() or not bool(state.get("claimed", false)):
 		return
-	var now_unix := Time.get_unix_time_from_system()
-	var last_tick := int(state.get("last_tick_unix", now_unix))
-	var elapsed_seconds := maxi(0, now_unix - last_tick)
-	if elapsed_seconds <= 0:
+	var now_hours := _current_game_hours()
+	var last_hour: float = float(state.get("last_game_hour", now_hours))
+	var elapsed_hours := maxf(0.0, now_hours - last_hour)
+	if elapsed_hours <= 0.0:
 		return
-	var elapsed_minutes := minf(float(elapsed_seconds) / 60.0, float(state.get("max_accumulation_minutes", DEFAULT_MAX_ACCUMULATION_MINUTES)))
+	var elapsed_minutes := minf(elapsed_hours * 60.0, float(state.get("max_accumulation_minutes", DEFAULT_MAX_ACCUMULATION_MINUTES)))
 	if elapsed_minutes <= 0.0:
 		return
 	var produced := elapsed_minutes * _yield_per_minute_for(location_data, state)
 	state["stored_amount"] = minf(float(state.get("stored_amount", 0.0)) + produced, _storage_cap_for(location_data, state))
-	state["last_tick_unix"] = now_unix
+	state["last_game_hour"] = now_hours
 	resource_nodes[node_id] = state
+
+
+func _current_game_hours() -> float:
+	var wtm := get_node_or_null("/root/WorldTimeManager")
+	if wtm != null:
+		return float(wtm.total_hours)
+	# Фоллбэк на реальное время (в случае запуска без WorldTimeManager)
+	return float(Time.get_unix_time_from_system()) / 3600.0
 
 
 func _yield_per_minute_for(location_data, state: Dictionary) -> float:

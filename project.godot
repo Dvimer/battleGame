@@ -32,6 +32,7 @@ BattleContext="*res://scripts/battle/battle_context.gd"
 RosterInventory="*res://scripts/world/roster/roster_inventory.gd"
 RosterManager="*res://scripts/world/roster/roster_manager.gd"
 ResourceManager="*res://scripts/world/resource_manager.gd"
+WorldTimeManager="*res://scripts/world/world_time_manager.gd"
 
 [display]
 

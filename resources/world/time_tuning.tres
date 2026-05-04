@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="TimeTuning" format=3]
+
+[ext_resource type="Script" path="res://scripts/world/time_tuning.gd" id="1_timetu"]
+
+[resource]
+script = ExtResource("1_timetu")
+real_seconds_per_day = 105.0
+speed_normal = 1.0
+speed_fast = 2.0
+dawn_start_hour = 5
+day_start_hour = 7
+dusk_start_hour = 19
+night_start_hour = 21
+daily_tick_hour = 6
+night_vision_mult = 0.5
+night_ranged_penalty = -3

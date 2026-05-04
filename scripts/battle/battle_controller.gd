@@ -22,7 +22,16 @@ var current_forecast_coord := Vector2i(-999, -999)
 
 
 func _ready() -> void:
+	# Заморозить глобальное время на время боя
+	var wtm := get_node_or_null("/root/WorldTimeManager")
+	if wtm != null:
+		wtm.freeze()
 	context = _load_context()
+	# Передать текущее время суток в окружение боя
+	if wtm != null and not context.has("environment"):
+		context["environment"] = {}
+	if wtm != null:
+		context.get_or_add("environment", {})["time_of_day"] = wtm.time_of_day
 	_build_state()
 	hex_map.position = BOARD_ORIGIN
 	units_layer.position = BOARD_ORIGIN
@@ -278,6 +287,10 @@ func _on_battle_finished(result: Dictionary) -> void:
 
 
 func _return_after_battle() -> void:
+	# Разморозить время при возврате из боя
+	var wtm := get_node_or_null("/root/WorldTimeManager")
+	if wtm != null:
+		wtm.unfreeze()
 	var return_scene := str(context.get("return_scene", ""))
 	var scene_router := get_node_or_null("/root/SceneRouter")
 	if return_scene != "" and scene_router != null:
