@@ -101,6 +101,7 @@ func _ready() -> void:
 	player.allow_attack = false
 	player.allow_dash = false
 	player.allow_click_move = true
+	player.screen_space_movement = true
 	player.set_movement_locked(false)
 	player.visible = false
 	player.global_position = game_state.get_world_player_position(world_meta.spawn_pos) if game_state != null else world_meta.spawn_pos

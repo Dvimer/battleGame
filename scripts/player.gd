@@ -23,6 +23,7 @@ const WEAPON_PISTOL := "pistol"
 @export var allow_attack := true
 @export var allow_dash := true
 @export var allow_click_move := false
+@export var screen_space_movement := false
 
 var max_health := 5
 var health := 5
@@ -75,6 +76,11 @@ func _physics_process(delta: float) -> void:
 		combo_changed.emit(combo_step, 0.0)
 
 	var input_vector := Vector2.ZERO if movement_locked else Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	if screen_space_movement and input_vector.length_squared() > 0.0:
+		input_vector = Vector2(
+			input_vector.x + input_vector.y * 2.0,
+			-input_vector.x + input_vector.y * 2.0
+		).normalized()
 	if input_vector.length_squared() > 0.0:
 		clear_move_target()
 	elif allow_click_move and has_move_target and not movement_locked:

@@ -65,6 +65,7 @@ func _ready() -> void:
 	player.allow_attack = false
 	player.allow_dash = false
 	player.allow_click_move = true
+	player.screen_space_movement = false
 	player.set_movement_locked(false)
 	if game_state != null:
 		game_state.ensure_loaded()
