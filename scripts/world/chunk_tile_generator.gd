@@ -30,7 +30,7 @@ func generate(chunk_coord: Vector2i, world_meta) -> Dictionary:
 	var chunk_origin: Vector2i = chunk_coord * size
 	for y in range(size):
 		for x in range(size):
-			var idx := y * size + x
+			var idx: int = y * size + x
 			var world_tile := Vector2i(chunk_origin.x + x, chunk_origin.y + y)
 			var sample := noise.get_noise_2d(world_tile.x, world_tile.y)
 			ground[idx] = biome.color.lerp(Color.WHITE, clampf((sample + 1.0) * 0.12, 0.0, 0.24))
