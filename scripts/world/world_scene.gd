@@ -271,7 +271,7 @@ func _refresh_minimap_fog() -> void:
 		return
 	_last_fog_player_tile = current_tile
 	fog.update_from_world_position(player.global_position)
-	var fog_image := fog.build_visibility_image()
+	var fog_image: Image = fog.build_visibility_image()
 	if _fog_texture == null:
 		_fog_texture = ImageTexture.create_from_image(fog_image)
 		minimap_fog.texture = _fog_texture
