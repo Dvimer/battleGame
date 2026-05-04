@@ -70,3 +70,7 @@ func deserialize(data: PackedByteArray, size: Vector2i, loaded_tile_size: int, r
 	tile_size = loaded_tile_size
 	visibility_radius_tiles = radius_tiles
 	states = data
+	_visible_indices.clear()
+	for idx in range(states.size()):
+		if states[idx] == STATE_VISIBLE:
+			_visible_indices.append(idx)

@@ -3,6 +3,7 @@ extends Node2D
 var settlement_data
 var config
 var interact_radius := 80.0
+var reveal_radius := 150.0
 var logical_position := Vector2.ZERO
 
 
@@ -33,6 +34,8 @@ func _physics_process(_delta: float) -> void:
 	var player = get_tree().get_first_node_in_group("player_avatar")
 	if player == null or settlement_data == null:
 		return
+	if not settlement_data.discovered and is_player_in_reveal_radius(player.global_position):
+		_reveal_settlement(player.global_position)
 	if not is_player_near(player.global_position):
 		return
 	if Input.is_action_just_pressed("interact"):
@@ -43,6 +46,10 @@ func is_player_near(player_position: Vector2) -> bool:
 	return logical_position.distance_to(player_position) <= interact_radius
 
 
+func is_player_in_reveal_radius(player_position: Vector2) -> bool:
+	return logical_position.distance_to(player_position) <= reveal_radius
+
+
 func get_display_name() -> String:
 	return settlement_data.settlement_name if settlement_data != null else "Поселение"
 
@@ -50,8 +57,9 @@ func get_display_name() -> String:
 func enter_settlement() -> void:
 	if settlement_data == null:
 		return
-	settlement_data.discovered = true
 	var player = get_tree().get_first_node_in_group("player_avatar")
+	if player != null:
+		_reveal_settlement(player.global_position)
 	var game_state = get_node_or_null("/root/GameState")
 	if game_state != null:
 		game_state.set_current_settlement(settlement_data.settlement_name)
@@ -70,6 +78,21 @@ func enter_settlement() -> void:
 	var scene_router = _scene_router()
 	if scene_router != null:
 		scene_router.go_to_scene(settlement_data.scene_path, settlement_data.spawn_id)
+
+
+func _reveal_settlement(player_position: Vector2 = Vector2.ZERO) -> void:
+	if settlement_data == null or settlement_data.discovered:
+		return
+	if player_position != Vector2.ZERO and not is_player_in_reveal_radius(player_position):
+		return
+	settlement_data.discovered = true
+	var game_state = get_node_or_null("/root/GameState")
+	if game_state != null:
+		game_state.register_settlement_visit(settlement_data.settlement_name, true)
+	var event_bus := _event_bus()
+	if event_bus != null:
+		event_bus.settlement_discovered.emit(settlement_data.settlement_name)
+	queue_redraw()
 
 
 func _draw() -> void:
