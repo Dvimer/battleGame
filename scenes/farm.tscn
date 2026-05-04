@@ -1,0 +1,92 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/farm_scene.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/spawn_point.gd" id="3"]
+
+[node name="FarmScene" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(1280, 720)
+enabled = true
+
+[node name="Player" parent="." instance=ExtResource("2")]
+position = Vector2(1280, 1240)
+
+[node name="FarmEntrySpawn" type="Marker2D" parent="."]
+position = Vector2(1280, 1240)
+script = ExtResource("3")
+spawn_id = "farm_entry"
+
+[node name="FarmTownSpawn" type="Marker2D" parent="."]
+position = Vector2(1280, 1240)
+script = ExtResource("3")
+spawn_id = "farm_town_return"
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="TitleLabel" type="Label" parent="HUD"]
+offset_left = 32.0
+offset_top = 24.0
+offset_right = 700.0
+offset_bottom = 60.0
+theme_override_font_sizes/font_size = 30
+text = "Ферма"
+
+[node name="SummaryLabel" type="Label" parent="HUD"]
+offset_left = 32.0
+offset_top = 70.0
+offset_right = 720.0
+offset_bottom = 176.0
+theme_override_font_sizes/font_size = 22
+text = "Сводка фермы"
+
+[node name="ResourceLabel" type="Label" parent="HUD"]
+offset_left = 32.0
+offset_top = 188.0
+offset_right = 760.0
+offset_bottom = 474.0
+theme_override_font_sizes/font_size = 20
+text = "Ресурсы"
+
+[node name="CenterBanner" type="Label" parent="HUD"]
+offset_left = 520.0
+offset_top = 22.0
+offset_right = 1400.0
+offset_bottom = 78.0
+theme_override_font_sizes/font_size = 30
+horizontal_alignment = 1
+text = ""
+
+[node name="PromptLabel" type="Label" parent="HUD"]
+offset_left = 32.0
+offset_top = 956.0
+offset_right = 1860.0
+offset_bottom = 994.0
+theme_override_font_sizes/font_size = 24
+text = "Подойди к зоне фермы и нажми E."
+
+[node name="HintLabel" type="Label" parent="HUD"]
+offset_left = 32.0
+offset_top = 1000.0
+offset_right = 1860.0
+offset_bottom = 1042.0
+theme_override_font_sizes/font_size = 22
+text = "Ферма выращивает еду и травы. Мост внизу возвращает в город."
+
+[node name="InventoryButton" type="Button" parent="HUD"]
+offset_left = 1812.0
+offset_top = 492.0
+offset_right = 1880.0
+offset_bottom = 588.0
+theme_override_font_sizes/font_size = 28
+text = "I"
+
+[node name="InteractButton" type="Button" parent="HUD"]
+offset_left = 1812.0
+offset_top = 600.0
+offset_right = 1880.0
+offset_bottom = 696.0
+theme_override_font_sizes/font_size = 28
+text = "E"

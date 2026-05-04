@@ -41,6 +41,10 @@ func _resource_manager() -> Node:
 	return get_node_or_null("/root/ResourceManager")
 
 
+func _world_state() -> Node:
+	return get_node_or_null("/root/WorldState")
+
+
 func ensure_loaded() -> void:
 	if loaded:
 		return
@@ -95,6 +99,7 @@ func save_game() -> void:
 		"roster_inventory": _roster_inventory().to_dict() if _roster_inventory() != null else {},
 		"roster_manager": _roster_manager().to_dict() if _roster_manager() != null else {},
 		"resource_manager": _resource_manager().to_dict() if _resource_manager() != null else {},
+		"world_state": _world_state().serialize() if _world_state() != null and _world_state().has_method("serialize") else {},
 		"world_time": _world_time_manager().serialize() if _world_time_manager() != null else {}
 	}
 	var file = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -173,6 +178,9 @@ func load_game() -> void:
 	var resource_manager := _resource_manager()
 	if resource_manager != null:
 		resource_manager.load_from_dict(Dictionary(data.get("resource_manager", {})))
+	var world_state := _world_state()
+	if world_state != null and world_state.has_method("deserialize"):
+		world_state.deserialize(Dictionary(data.get("world_state", {})))
 	var world_time_manager := _world_time_manager()
 	if world_time_manager != null and data.has("world_time"):
 		world_time_manager.deserialize(Dictionary(data.get("world_time", {})))

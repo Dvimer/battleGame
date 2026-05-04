@@ -7,6 +7,7 @@ const WORKSHOP_POS := Vector2(620.0, 280.0)
 const HOUSE_POS := Vector2(1180.0, 220.0)
 const BARRACKS_POS := Vector2(360.0, 220.0)
 const CITY_GATE_POS := Vector2(960.0, 150.0)
+const FARM_BRIDGE_POS := Vector2(960.0, 930.0)
 const PATROL_POS := Vector2(1600.0, 210.0)
 const INTERACT_RADIUS := 90.0
 const INVENTORY_SCENE := preload("res://scenes/inventory/inventory.tscn")
@@ -140,9 +141,10 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if nearest_hotspot == "":
-		prompt_label.text = localizer.t("base.prompt.walk") if localizer != null else "Walk through town. Chest, trader, workshop, barracks, house, and city gate are all active."
+		var base_prompt: String = localizer.t("base.prompt.walk") if localizer != null else "Walk through town. Chest, trader, workshop, barracks, house, and city gate are all active."
+		prompt_label.text = "%s %s" % [base_prompt, _raw_text("A farm bridge is open at the bottom of town.", "Внизу открылся мостик на ферму.")]
 	else:
-		var hotspot_name := _hotspot_name(nearest_hotspot)
+		var hotspot_name: String = _hotspot_name(nearest_hotspot)
 		prompt_label.text = localizer.t("base.prompt.near", {"value": hotspot_name}) if localizer != null else "Press E or left click near %s." % hotspot_name
 
 	if Input.is_action_just_pressed("interact") and nearest_hotspot != "":
@@ -157,6 +159,7 @@ func _find_nearest_hotspot() -> String:
 		"trader": TRADER_POS,
 		"workshop": WORKSHOP_POS,
 		"gate": CITY_GATE_POS,
+		"farm": FARM_BRIDGE_POS,
 		"patrol": PATROL_POS
 	}
 	var best := ""
@@ -182,6 +185,8 @@ func _hotspot_name(hotspot_id: String) -> String:
 			return localizer.t("base.hotspot.house") if localizer != null else "the house door"
 		"gate":
 			return localizer.t("base.hotspot.gate") if localizer != null else "the city gate"
+		"farm":
+			return _raw_text("the farm bridge", "фермерским мостиком")
 		"patrol":
 			return "разбойничий дозор"
 		_:
@@ -198,6 +203,8 @@ func _open_hotspot(hotspot_id: String) -> void:
 			_open_workshop_menu()
 		"gate":
 			_open_gate_menu()
+		"farm":
+			_open_farm_menu()
 		"patrol":
 			_start_patrol_battle()
 
@@ -359,6 +366,30 @@ func _open_storage_menu() -> void:
 	])
 
 
+func _open_farm_menu() -> void:
+	var world_state := _world_state()
+	var summary: String = world_state.get_farm_summary(_current_game_hours()) if world_state != null and world_state.has_method("get_farm_summary") else _raw_text("Farm data unavailable", "Данные фермы недоступны")
+	_open_menu(
+		_raw_text("Bridge to Farm", "Мост на ферму"),
+		"[b]%s[/b]\n\n%s\n\n%s" % [
+			_raw_text("A separate Albion-style farming location lies beyond the bridge.", "За мостом расположена отдельная фермерская локация в духе Albion."),
+			_raw_text("The farm is split into fields, herb beds, orchard space, and a management shed.", "Ферма разделена на поля, травник, садовую зону и управляющий сарай."),
+			summary
+		],
+		[
+			{
+				"label": _raw_text("Travel to the farm\nOpen the separate farming scene", "Отправиться на ферму\nОткрыть отдельную локацию хозяйства"),
+				"variant": "success",
+				"callback": Callable(self, "_open_farm_scene")
+			},
+			{
+				"label": _raw_text("Stay in town", "Остаться в городе"),
+				"variant": "neutral"
+			}
+		]
+	)
+
+
 func _collect_chest() -> void:
 	var world_state := _world_state()
 	var localizer := _localizer()
@@ -381,7 +412,10 @@ func _buy_attack_tonic() -> void:
 	if world_state.buy_attack_tonic():
 		_show_banner_key("base.banner.attack_packed", {}, 1.4)
 	else:
-		_show_banner_key("common.not_enough_essence", {}, 1.2) if localizer != null else _show_banner("Not enough essence", 1.2)
+		if localizer != null:
+			_show_banner_key("common.not_enough_essence", {}, 1.2)
+		else:
+			_show_banner("Not enough essence", 1.2)
 	_refresh_labels()
 
 
@@ -393,7 +427,10 @@ func _buy_ration_pack() -> void:
 	if world_state.buy_ration_pack():
 		_show_banner_key("base.banner.rations_packed", {}, 1.4)
 	else:
-		_show_banner_key("common.not_enough_essence", {}, 1.2) if localizer != null else _show_banner("Not enough essence", 1.2)
+		if localizer != null:
+			_show_banner_key("common.not_enough_essence", {}, 1.2)
+		else:
+			_show_banner("Not enough essence", 1.2)
 	_refresh_labels()
 
 
@@ -405,7 +442,10 @@ func _buy_dash_boots() -> void:
 	if world_state.buy_dash_boots():
 		_show_banner_key("base.banner.boots_ready", {}, 1.4)
 	else:
-		_show_banner_key("common.not_enough_essence", {}, 1.2) if localizer != null else _show_banner("Not enough essence", 1.2)
+		if localizer != null:
+			_show_banner_key("common.not_enough_essence", {}, 1.2)
+		else:
+			_show_banner("Not enough essence", 1.2)
 	_refresh_labels()
 
 
@@ -417,7 +457,10 @@ func _build_forge() -> void:
 	if world_state.build_forge():
 		_show_banner_key("base.banner.forge_built", {}, 1.6)
 	else:
-		_show_banner_key("common.need_more_essence", {}, 1.2) if localizer != null else _show_banner("Need more essence", 1.2)
+		if localizer != null:
+			_show_banner_key("common.need_more_essence", {}, 1.2)
+		else:
+			_show_banner("Need more essence", 1.2)
 	_refresh_labels()
 
 
@@ -429,7 +472,10 @@ func _build_garden() -> void:
 	if world_state.build_garden():
 		_show_banner_key("base.banner.garden_built", {}, 1.6)
 	else:
-		_show_banner_key("common.need_more_essence", {}, 1.2) if localizer != null else _show_banner("Need more essence", 1.2)
+		if localizer != null:
+			_show_banner_key("common.need_more_essence", {}, 1.2)
+		else:
+			_show_banner("Need more essence", 1.2)
 	_refresh_labels()
 
 
@@ -470,6 +516,14 @@ func _open_world_map() -> void:
 		scene_router.go_to_scene("res://scenes/world.tscn")
 	else:
 		get_tree().change_scene_to_file("res://scenes/world.tscn")
+
+
+func _open_farm_scene() -> void:
+	var scene_router := _scene_router()
+	if scene_router != null:
+		scene_router.go_to_scene("res://scenes/farm.tscn", "farm_entry")
+	else:
+		get_tree().change_scene_to_file("res://scenes/farm.tscn")
 
 
 func _on_menu_state_changed(is_open: bool) -> void:
@@ -615,6 +669,7 @@ func _draw() -> void:
 	_draw_house(Vector2(1240.0, 370.0), Vector2(280.0, 160.0), Color("cda274"))
 	_draw_workshop()
 	_draw_gate()
+	_draw_farm_bridge()
 	_draw_patrol()
 	_draw_marker(CHEST_POS, Color("e0c341"))
 	_draw_marker(TRADER_POS, Color("6ac3ff"))
@@ -622,6 +677,7 @@ func _draw() -> void:
 	_draw_marker(BARRACKS_POS, Color("d98842"))
 	_draw_marker(WORKSHOP_POS, Color("8fce72"))
 	_draw_marker(CITY_GATE_POS, Color("b18cff"))
+	_draw_marker(FARM_BRIDGE_POS, Color("7fd1a0"))
 	_draw_marker(PATROL_POS, Color("d24f4f"))
 	var localizer := _localizer()
 	_draw_world_label(CHEST_POS + Vector2(-28.0, -30.0), localizer.t("base.world_label.chest") if localizer != null else "Chest", Color("e0c341"))
@@ -630,6 +686,7 @@ func _draw() -> void:
 	_draw_world_label(HOUSE_POS + Vector2(-28.0, -38.0), localizer.t("base.world_label.house") if localizer != null else "House", Color("f08a5d"))
 	_draw_world_label(BARRACKS_POS + Vector2(-38.0, -38.0), "Казарма", Color("d98842"))
 	_draw_world_label(CITY_GATE_POS + Vector2(-44.0, -90.0), localizer.t("base.world_label.gate") if localizer != null else "City Gate", Color("b18cff"))
+	_draw_world_label(FARM_BRIDGE_POS + Vector2(-34.0, -28.0), _raw_text("Farm", "Ферма"), Color("7fd1a0"))
 	_draw_world_label(PATROL_POS + Vector2(-72.0, -38.0), "Дозор", Color("d24f4f"))
 
 
@@ -656,6 +713,15 @@ func _draw_gate() -> void:
 	draw_arc(CITY_GATE_POS, 48.0, PI, TAU, 28, Color("d7c9ff"), 8.0)
 
 
+func _draw_farm_bridge() -> void:
+	draw_rect(Rect2(Vector2(905.0, 790.0), Vector2(110.0, 220.0)), Color("b48e61"))
+	draw_line(Vector2(905.0, 790.0), Vector2(905.0, 1010.0), Color("704d35"), 8.0)
+	draw_line(Vector2(1015.0, 790.0), Vector2(1015.0, 1010.0), Color("704d35"), 8.0)
+	for index in range(4):
+		var y := 825.0 + float(index) * 45.0
+		draw_line(Vector2(905.0, y), Vector2(1015.0, y), Color("7d593c"), 5.0)
+
+
 func _draw_patrol() -> void:
 	draw_circle(PATROL_POS + Vector2(-22.0, 10.0), 16.0, Color("8f2b2b"))
 	draw_circle(PATROL_POS + Vector2(0.0, -8.0), 18.0, Color("b53a3a"))
@@ -673,3 +739,17 @@ func _draw_world_label(pos: Vector2, text: String, tint: Color) -> void:
 	if font == null:
 		return
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22, tint)
+
+
+func _raw_text(en_text: String, ru_text: String) -> String:
+	var localizer := _localizer()
+	if localizer != null and localizer.has_method("get_language") and localizer.get_language() == "en":
+		return en_text
+	return ru_text
+
+
+func _current_game_hours() -> float:
+	var world_time_manager := get_node_or_null("/root/WorldTimeManager")
+	if world_time_manager != null:
+		return float(world_time_manager.total_hours)
+	return 0.0

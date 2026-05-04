@@ -35,6 +35,11 @@ position = Vector2(920, 840)
 script = ExtResource("3")
 spawn_id = "hub_city_return"
 
+[node name="HubFarmReturnSpawn" type="Marker2D" parent="."]
+position = Vector2(960, 930)
+script = ExtResource("3")
+spawn_id = "hub_farm_return"
+
 [node name="HouseDoorTrigger" type="Node2D" parent="."]
 position = Vector2(1180, 352)
 script = ExtResource("4")
